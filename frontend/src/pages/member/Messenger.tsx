@@ -224,7 +224,7 @@ export default function Messenger() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">메신저</h1>
+        <h1 className="text-2xl font-bold text-gray-900">클럽</h1>
         <div className="flex gap-2">
           {pendingInvitations.length > 0 && (
             <button
@@ -239,7 +239,7 @@ export default function Messenger() {
               onClick={() => setShowCreateModal(true)}
               className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
             >
-              새 채팅방 만들기
+              새 클럽 만들기
             </button>
           )}
         </div>
@@ -248,11 +248,11 @@ export default function Messenger() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[600px]">
         {/* 채팅방 목록 */}
         <div className="bg-white rounded-lg shadow p-4 overflow-y-auto max-h-[600px]">
-          {/* 공용 채팅방 */}
+          {/* 공용 클럽 */}
           {publicRooms.length > 0 && (
             <div className="mb-4">
               <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                공용 채팅방
+                공용 클럽
               </h3>
               {publicRooms.map((room) => (
                 <RoomButton
@@ -265,11 +265,11 @@ export default function Messenger() {
             </div>
           )}
 
-          {/* 강의/그룹 채팅방 */}
-          {privateRooms.length > 0 && (
+          {/* 비공용 클럽 - 클럽 가입 희망 회원만 표시 */}
+          {user?.wants_club_membership !== false && privateRooms.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                {user?.role === 'instructor' ? '내 강의 채팅방' : '참여 중인 채팅방'}
+                {user?.role === 'instructor' ? '내 클럽' : '참여 중인 클럽'}
               </h3>
               {privateRooms.map((room) => (
                 <RoomButton
@@ -284,7 +284,13 @@ export default function Messenger() {
 
           {rooms?.length === 0 && (
             <p className="text-gray-500 text-sm text-center py-4">
-              참여 중인 채팅방이 없습니다.
+              참여 중인 클럽이 없습니다.
+            </p>
+          )}
+
+          {user?.wants_club_membership === false && privateRooms.length > 0 && (
+            <p className="text-gray-400 text-xs text-center py-2 border-t mt-2 pt-2">
+              클럽 미가입 회원은 공용 클럽만 이용 가능합니다.
             </p>
           )}
         </div>
@@ -293,7 +299,7 @@ export default function Messenger() {
         <div className="md:col-span-3 bg-white rounded-lg shadow flex flex-col min-h-0 max-h-[600px]">
           {selectedRoom ? (
             <>
-              {/* 채팅방 헤더 */}
+              {/* 클럽 헤더 */}
               <div className="border-b p-4 flex justify-between items-center flex-shrink-0">
                 <div>
                   <div className="flex items-center gap-2">
@@ -307,7 +313,7 @@ export default function Messenger() {
                   <p className="text-sm text-gray-500">
                     {selectedRoom.member_count}명 참여 중
                     {selectedRoom.created_by && !selectedRoom.is_public && (
-                      <> | 개설자: {selectedRoom.created_by.username}</>
+                      <> | 클럽장: {selectedRoom.created_by.username}</>
                     )}
                   </p>
                 </div>
@@ -398,19 +404,19 @@ export default function Messenger() {
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-gray-500">
-              채팅방을 선택하세요
+              클럽을 선택하세요
             </div>
           )}
         </div>
       </div>
 
-      {/* 채팅방 생성 모달 */}
+      {/* 클럽 생성 모달 */}
       {showCreateModal && (
-        <Modal onClose={() => setShowCreateModal(false)} title="새 채팅방 만들기">
+        <Modal onClose={() => setShowCreateModal(false)} title="새 클럽 만들기">
           <form onSubmit={handleCreateRoom} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                채팅방 이름
+                클럽 이름
               </label>
               <input
                 type="text"
@@ -469,7 +475,7 @@ export default function Messenger() {
                       {member.role === 'admin'
                         ? '관리자'
                         : member.role === 'instructor'
-                          ? '강사'
+                          ? '클럽장'
                           : '일반 회원'}
                     </div>
                   </div>

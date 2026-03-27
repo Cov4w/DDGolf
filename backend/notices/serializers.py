@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Notice
+from .models import Notice, Banner, Organization
 from accounts.serializers import UserSerializer
 
 
@@ -40,3 +40,21 @@ class NoticeAdminSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'content', 'author', 'visibility', 'visibility_display',
                   'is_important', 'is_hidden', 'views', 'created_at', 'updated_at']
         read_only_fields = ['id', 'author', 'views', 'created_at', 'updated_at']
+
+
+class BannerSerializer(serializers.ModelSerializer):
+    """배너 시리얼라이저"""
+
+    class Meta:
+        model = Banner
+        fields = ['id', 'image', 'phone_number', 'description', 'order', 'is_active', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class OrganizationSerializer(serializers.ModelSerializer):
+    """유관기관 시리얼라이저"""
+
+    class Meta:
+        model = Organization
+        fields = ['id', 'name', 'logo', 'link', 'order', 'is_active']
+        read_only_fields = ['id']

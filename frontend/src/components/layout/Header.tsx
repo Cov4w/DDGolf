@@ -144,7 +144,7 @@ export default function Header() {
                     to="/messenger"
                     className="relative block px-8 py-4 text-white font-medium hover:bg-green-900 transition-colors"
                   >
-                    메신저
+                    클럽
                     {totalUnread > 0 && (
                       <span className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                         {totalUnread > 99 ? '99+' : totalUnread}

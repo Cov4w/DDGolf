@@ -36,3 +36,38 @@ class Notice(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class Banner(models.Model):
+    """배너 광고"""
+    image = models.ImageField('배너 이미지', upload_to='banners/')
+    phone_number = models.CharField('전화번호', max_length=20)
+    description = models.CharField('간단 문구', max_length=100)
+    order = models.PositiveIntegerField('순서', default=0)
+    is_active = models.BooleanField('활성화', default=True)
+    created_at = models.DateTimeField('생성일', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '배너'
+        verbose_name_plural = '배너 목록'
+        ordering = ['order', '-created_at']
+
+    def __str__(self):
+        return self.description
+
+
+class Organization(models.Model):
+    """유관기관"""
+    name = models.CharField('기관명', max_length=100)
+    logo = models.ImageField('로고', upload_to='organizations/')
+    link = models.URLField('링크')
+    order = models.PositiveIntegerField('순서', default=0)
+    is_active = models.BooleanField('활성화', default=True)
+
+    class Meta:
+        verbose_name = '유관기관'
+        verbose_name_plural = '유관기관 목록'
+        ordering = ['order']
+
+    def __str__(self):
+        return self.name

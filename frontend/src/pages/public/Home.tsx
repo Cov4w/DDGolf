@@ -5,6 +5,7 @@ import { noticesService } from '../../services/notices';
 import { scheduleService } from '../../services/schedule';
 import { messengerService } from '../../services/messenger';
 import { useAuthStore } from '../../store/authStore';
+import BannerSlider from '../../components/common/BannerSlider';
 
 export default function Home() {
   const { isAuthenticated, user } = useAuthStore();
@@ -77,7 +78,7 @@ export default function Home() {
             {isAuthenticated && user?.is_approved && (
               <li>
                 <Link to="/messenger" className="text-gray-600 hover:text-green-700 block py-1 flex items-center justify-between">
-                  <span>→ 메신저</span>
+                  <span>→ 클럽</span>
                   {unreadData && (unreadData.total_unread > 0 || unreadData.pending_invitations > 0) && (
                     <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
                       {unreadData.total_unread + unreadData.pending_invitations}
@@ -102,6 +103,9 @@ export default function Home() {
           <p className="text-xl drop-shadow-lg">함께하는 골프, 즐거운 라운딩</p>
         </div>
       </section>
+
+      {/* Banner Slider */}
+      <BannerSlider />
 
       {/* Main Content */}
       <section className="max-w-7xl mx-auto px-4 py-8">

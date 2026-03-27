@@ -38,7 +38,7 @@ class User(AbstractUser):
 
     class Role(models.TextChoices):
         ADMIN = 'admin', '관리자'
-        INSTRUCTOR = 'instructor', '강사'
+        INSTRUCTOR = 'instructor', '클럽장'
         MEMBER = 'member', '일반 회원'
         PENDING = 'pending', '승인대기'
 
@@ -57,13 +57,22 @@ class User(AbstractUser):
         '요청 역할',
         max_length=20,
         choices=[
-            ('instructor', '강사'),
+            ('instructor', '클럽장'),
             ('member', '일반 회원'),
         ],
         default='member',
         help_text='회원가입 시 신청한 역할'
     )
     is_approved = models.BooleanField('승인 여부', default=False)
+    wants_club_membership = models.BooleanField('클럽 가입 희망', default=False)
+    assigned_club = models.ForeignKey(
+        'messenger.ChatRoom',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        verbose_name='배정 클럽',
+        related_name='assigned_members'
+    )
     is_email_verified = models.BooleanField('이메일 인증 여부', default=False)
     social_provider = models.CharField('소셜 로그인 제공자', max_length=20, blank=True, null=True)
     created_at = models.DateTimeField('가입일', auto_now_add=True)

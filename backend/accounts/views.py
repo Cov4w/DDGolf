@@ -147,10 +147,6 @@ class GoogleLoginView(APIView):
 
     def post(self, request):
         """프론트엔드에서 Google access_token을 받아 처리"""
-        from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
-        from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-        from dj_rest_auth.registration.views import SocialLoginView
-
         access_token = request.data.get('access_token')
         if not access_token:
             return Response(

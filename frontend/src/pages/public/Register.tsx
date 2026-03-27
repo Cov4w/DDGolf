@@ -112,10 +112,18 @@ export default function Register() {
         if (response.access_token) {
           try {
             const result = await authService.googleLogin(response.access_token);
+
+            // 승인 대기 중인 경우
+            if (result.pending_approval) {
+              alert(result.message || '관리자 승인 대기 중입니다. 승인 후 로그인 가능합니다.');
+              setGoogleLoading(false);
+              return;
+            }
+
             setUser(result.user);
 
             if (result.created) {
-              alert('구글 계정으로 회원가입이 완료되었습니다. 관리자 승인 후 이용 가능합니다.');
+              alert('구글 계정으로 회원가입이 완료되었습니다!');
             }
 
             navigate('/', { replace: true });

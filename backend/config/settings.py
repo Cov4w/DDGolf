@@ -6,8 +6,12 @@ DDGolf - 골프 관리 홈페이지
 import os
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# .env 파일 로드
+load_dotenv(BASE_DIR / '.env')
 
 # 환경 변수에서 설정 로드 (Docker/Production 지원)
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-7%=yw$qy9d-q^ptx%2qep!u$a^i%zm9z@8n*o)vwc-)nzjv2#x')

@@ -2,7 +2,7 @@
 
 ## 버전 정보
 
-**현재 버전: 1.1.20260327**
+**현재 버전: 1.2.20260327**
 
 버전 형식: `메이저.마이너.날짜(YYYYMMDD)`
 
@@ -10,6 +10,7 @@
 
 | 버전 | 날짜 | 내용 |
 |------|------|------|
+| 1.2.20260327 | 2026-03-27 | .env 통합 (프로젝트 루트로 일원화) |
 | 1.1.20260327 | 2026-03-27 | Google OAuth 로그인/회원가입 구현, python-dotenv 적용 |
 | 1.0.20260210 | 2026-02-10 | 초기 배포 (회원관리, 게시판, 갤러리, 메신저, 일정, 공지사항) |
 
@@ -39,11 +40,11 @@
 
 ---
 
-## 환경 변수
+## 환경 변수 (`.env`)
 
-### Backend (`backend/.env`)
+프로젝트 루트의 `.env` 파일 하나로 Backend/Frontend 환경변수를 통합 관리합니다.
 
-| 변수 | 설명 | 기본값 |
+| 변수 | 용도 | 기본값 |
 |------|------|--------|
 | SECRET_KEY | Django 시크릿 키 | (자동 생성) |
 | DEBUG | 디버그 모드 | True |
@@ -54,32 +55,28 @@
 | EMAIL_HOST_PASSWORD | Gmail 앱 비밀번호 | (없음) |
 | GOOGLE_CLIENT_ID | Google OAuth Client ID | (없음) |
 | GOOGLE_CLIENT_SECRET | Google OAuth Client Secret | (없음) |
-
-### Frontend (`frontend/.env`)
-
-| 변수 | 설명 | 기본값 |
-|------|------|--------|
-| VITE_API_URL | 백엔드 API URL | /api |
-| VITE_GOOGLE_CLIENT_ID | Google OAuth Client ID | (없음) |
+| VITE_API_URL | 프론트엔드 API URL | /api |
+| VITE_GOOGLE_CLIENT_ID | 프론트엔드 Google Client ID | (없음) |
 
 ---
 
 ## 로컬 개발
 
 ```bash
+# 환경변수 설정
+cp .env.example .env  # 루트에서 한 번만
+
 # Backend
 cd backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # 환경변수 설정
 python manage.py migrate
 python manage.py runserver 9000
 
 # Frontend
 cd frontend
 npm install
-cp .env.example .env  # 환경변수 설정
 npm run dev
 ```
 

@@ -1,5 +1,5 @@
 import api from './api';
-import type { Notice, PaginatedResponse } from '../types';
+import type { Notice, PaginatedResponse, Banner, Organization } from '../types';
 
 export const noticesService = {
   // 회원용 공지사항 (로그인 필요)
@@ -36,5 +36,69 @@ export const noticesService = {
   getPublicNotice: async (id: number): Promise<Notice> => {
     const response = await api.get(`/notices/public/${id}/`);
     return response.data;
+  },
+
+  // 배너 API
+  getBanners: async (): Promise<Banner[]> => {
+    const response = await api.get('/notices/banners/');
+    return response.data;
+  },
+
+  createBanner: async (data: FormData): Promise<Banner> => {
+    const response = await api.post('/notices/banners/', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  updateBanner: async (id: number, data: FormData): Promise<Banner> => {
+    const response = await api.patch(`/notices/banners/${id}/`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  deleteBanner: async (id: number): Promise<void> => {
+    await api.delete(`/notices/banners/${id}/`);
+  },
+
+  moveBannerUp: async (id: number): Promise<void> => {
+    await api.post(`/notices/banners/${id}/move_up/`);
+  },
+
+  moveBannerDown: async (id: number): Promise<void> => {
+    await api.post(`/notices/banners/${id}/move_down/`);
+  },
+
+  // 유관기관 API
+  getOrganizations: async (): Promise<Organization[]> => {
+    const response = await api.get('/notices/organizations/');
+    return response.data;
+  },
+
+  createOrganization: async (data: FormData): Promise<Organization> => {
+    const response = await api.post('/notices/organizations/', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  updateOrganization: async (id: number, data: FormData): Promise<Organization> => {
+    const response = await api.patch(`/notices/organizations/${id}/`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  deleteOrganization: async (id: number): Promise<void> => {
+    await api.delete(`/notices/organizations/${id}/`);
+  },
+
+  moveOrganizationUp: async (id: number): Promise<void> => {
+    await api.post(`/notices/organizations/${id}/move_up/`);
+  },
+
+  moveOrganizationDown: async (id: number): Promise<void> => {
+    await api.post(`/notices/organizations/${id}/move_down/`);
   },
 };

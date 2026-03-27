@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { User, Notice, Album, ChatRoom, Message } from '../../types';
 import Loading from '../../components/common/Loading';
+import { noticesService } from '../../services/notices';
 
 // Event 타입 정의
 interface Event {
@@ -158,7 +159,7 @@ function FileDropZone({
   );
 }
 
-type TabType = 'members' | 'notices' | 'schedule' | 'gallery' | 'messenger';
+type TabType = 'members' | 'notices' | 'schedule' | 'gallery' | 'messenger' | 'banners' | 'organizations';
 
 interface ChatBan {
   id: number;
@@ -183,7 +184,40 @@ export default function AdminDashboard() {
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   const [coverImage, setCoverImage] = useState<File[]>([]);
   const [albumPhotos, setAlbumPhotos] = useState<File[]>([]);
+  const [showBannerForm, setShowBannerForm] = useState(false);
+  const [showOrgForm, setShowOrgForm] = useState(false);
+  const [bannerImage, setBannerImage] = useState<File[]>([]);
+  const [orgLogo, setOrgLogo] = useState<File[]>([]);
+  const [showClubModal, setShowClubModal] = useState(false);
+  const [pendingApprovalUser, setPendingApprovalUser] = useState<User | null>(null);
+  const [pendingApprovalRole, setPendingApprovalRole] = useState<string>('member');
+  const [selectedClubId, setSelectedClubId] = useState<number | null>(null);
+  const [bannerPhone, setBannerPhone] = useState('');
   const queryClient = useQueryClient();
+
+  // 전화번호 자동 포맷팅
+  const formatPhoneNumber = (value: string) => {
+    const numbers = value.replace(/[^\d]/g, '');
+    if (numbers.length <= 2) return numbers;
+    if (numbers.length <= 6) return `${numbers.slice(0, 2)}-${numbers.slice(2)}`;
+    if (numbers.length <= 10) return `${numbers.slice(0, 2)}-${numbers.slice(2, 6)}-${numbers.slice(6)}`;
+    // 010 등 휴대폰 번호
+    if (numbers.startsWith('01')) {
+      if (numbers.length <= 3) return numbers;
+      if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
+      return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
+    }
+    // 02 서울 지역번호
+    if (numbers.startsWith('02')) {
+      if (numbers.length <= 2) return numbers;
+      if (numbers.length <= 6) return `${numbers.slice(0, 2)}-${numbers.slice(2)}`;
+      return `${numbers.slice(0, 2)}-${numbers.slice(2, 6)}-${numbers.slice(6, 10)}`;
+    }
+    // 기타 지역번호 (031, 032, etc.)
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
+    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
+  };
 
   // Users Query
   const { data: users, isLoading: usersLoading } = useQuery({
@@ -254,6 +288,33 @@ export default function AdminDashboard() {
     enabled: activeTab === 'messenger',
   });
 
+  // Banners Query
+  const { data: banners, isLoading: bannersLoading } = useQuery({
+    queryKey: ['adminBanners'],
+    queryFn: () => noticesService.getBanners(),
+    enabled: activeTab === 'banners',
+  });
+
+  // Organizations Query
+  const { data: organizations, isLoading: orgsLoading } = useQuery({
+    queryKey: ['adminOrganizations'],
+    queryFn: () => noticesService.getOrganizations(),
+    enabled: activeTab === 'organizations',
+  });
+
+  // All ChatRooms for club assignment
+  const { data: allChatRooms } = useQuery({
+    queryKey: ['allChatRoomsForAssignment'],
+    queryFn: async () => {
+      const response = await api.get('/messenger/rooms/');
+      if (response.data.results) {
+        return response.data.results as ChatRoom[];
+      }
+      return response.data as ChatRoom[];
+    },
+    enabled: showClubModal,
+  });
+
   // Room Messages Query (관리자용 - 모든 메시지 조회)
   const { data: roomMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ['adminRoomMessages', selectedRoom],
@@ -266,9 +327,15 @@ export default function AdminDashboard() {
 
   // Member Mutations
   const approveMutation = useMutation({
-    mutationFn: ({ userId, role }: { userId: number; role?: string }) =>
-      api.post(`/accounts/users/${userId}/approve/`, role ? { role } : {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminUsers'] }),
+    mutationFn: ({ userId, role, assignedClub }: { userId: number; role?: string; assignedClub?: number }) =>
+      api.post(`/accounts/users/${userId}/approve/`, { role, assigned_club: assignedClub }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+      setShowClubModal(false);
+      setPendingApprovalUser(null);
+      setPendingApprovalRole('member');
+      setSelectedClubId(null);
+    },
   });
 
   const blockMutation = useMutation({
@@ -387,8 +454,113 @@ export default function AdminDashboard() {
     },
   });
 
-  const isLoading = usersLoading || noticesLoading || albumsLoading || roomsLoading || eventsLoading;
+  // Banner Mutations
+  const createBannerMutation = useMutation({
+    mutationFn: (data: FormData) => noticesService.createBanner(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminBanners'] });
+      setShowBannerForm(false);
+      setBannerImage([]);
+      setBannerPhone('');
+    },
+  });
+
+  const deleteBannerMutation = useMutation({
+    mutationFn: (id: number) => noticesService.deleteBanner(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminBanners'] }),
+  });
+
+  const moveBannerUpMutation = useMutation({
+    mutationFn: (id: number) => noticesService.moveBannerUp(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminBanners'] }),
+  });
+
+  const moveBannerDownMutation = useMutation({
+    mutationFn: (id: number) => noticesService.moveBannerDown(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminBanners'] }),
+  });
+
+  // Organization Mutations
+  const createOrgMutation = useMutation({
+    mutationFn: (data: FormData) => noticesService.createOrganization(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminOrganizations'] });
+      setShowOrgForm(false);
+      setOrgLogo([]);
+    },
+  });
+
+  const deleteOrgMutation = useMutation({
+    mutationFn: (id: number) => noticesService.deleteOrganization(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminOrganizations'] }),
+  });
+
+  const moveOrgUpMutation = useMutation({
+    mutationFn: (id: number) => noticesService.moveOrganizationUp(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminOrganizations'] }),
+  });
+
+  const moveOrgDownMutation = useMutation({
+    mutationFn: (id: number) => noticesService.moveOrganizationDown(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminOrganizations'] }),
+  });
+
+  const isLoading = usersLoading || noticesLoading || albumsLoading || roomsLoading || eventsLoading || bannersLoading || orgsLoading;
   if (isLoading && activeTab === 'members') return <Loading />;
+
+  const handleBannerSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData();
+
+    formData.append('phone_number', form.querySelector<HTMLInputElement>('[name="phone_number"]')?.value || '');
+    formData.append('description', form.querySelector<HTMLInputElement>('[name="description"]')?.value || '');
+    formData.append('is_active', form.querySelector<HTMLInputElement>('[name="is_active"]')?.checked ? 'true' : 'false');
+
+    if (bannerImage.length > 0) {
+      formData.append('image', bannerImage[0]);
+    }
+
+    createBannerMutation.mutate(formData);
+  };
+
+  const handleOrgSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData();
+
+    formData.append('name', form.querySelector<HTMLInputElement>('[name="name"]')?.value || '');
+    formData.append('link', form.querySelector<HTMLInputElement>('[name="link"]')?.value || '');
+    formData.append('is_active', form.querySelector<HTMLInputElement>('[name="is_active"]')?.checked ? 'true' : 'false');
+
+    if (orgLogo.length > 0) {
+      formData.append('logo', orgLogo[0]);
+    }
+
+    createOrgMutation.mutate(formData);
+  };
+
+  // 회원 승인 핸들러 - 클럽 가입 희망 시 모달 표시
+  const handleApprove = (user: User, role: string) => {
+    if (user.wants_club_membership) {
+      setPendingApprovalUser(user);
+      setPendingApprovalRole(role);
+      setShowClubModal(true);
+    } else {
+      if (window.confirm(`${user.username}님을 ${role === 'instructor' ? '클럽장' : '일반 회원'}(으)로 승인하시겠습니까?`)) {
+        approveMutation.mutate({ userId: user.id, role });
+      }
+    }
+  };
+
+  const handleApproveWithClub = () => {
+    if (!pendingApprovalUser) return;
+    approveMutation.mutate({
+      userId: pendingApprovalUser.id,
+      role: pendingApprovalRole,
+      assignedClub: selectedClubId || undefined,
+    });
+  };
 
   const pendingUsers = users?.filter((u) => !u.is_approved) || [];
   const displayUsers = memberFilter === 'pending' ? pendingUsers : users || [];
@@ -460,7 +632,9 @@ export default function AdminDashboard() {
             { key: 'notices', label: '공지사항 관리' },
             { key: 'schedule', label: '경기일정 관리' },
             { key: 'gallery', label: '갤러리 관리' },
-            { key: 'messenger', label: '채팅 제재 관리' },
+            { key: 'messenger', label: '클럽 관리' },
+            { key: 'banners', label: '배너 관리' },
+            { key: 'organizations', label: '유관기관 관리' },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -562,8 +736,13 @@ export default function AdminDashboard() {
                               ? 'bg-purple-100 text-purple-800'
                               : 'bg-blue-100 text-blue-800'
                           }`}>
-                            {user.requested_role === 'instructor' ? '강사' : '일반 회원'}
+                            {user.requested_role === 'instructor' ? '클럽장' : '일반 회원'}
                           </span>
+                          {user.wants_club_membership && (
+                            <span className="ml-1 inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                              클럽 희망
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           {user.is_approved ? (
@@ -578,7 +757,7 @@ export default function AdminDashboard() {
                               className="text-xs border border-gray-300 rounded px-2 py-1"
                             >
                               <option value="admin">관리자</option>
-                              <option value="instructor">강사</option>
+                              <option value="instructor">클럽장</option>
                               <option value="member">일반 회원</option>
                             </select>
                           ) : (
@@ -600,24 +779,15 @@ export default function AdminDashboard() {
                             {!user.is_approved && (
                               <>
                                 <button
-                                  onClick={() => {
-                                    const roleText = user.requested_role === 'instructor' ? '강사' : '일반 회원';
-                                    if (window.confirm(`${user.username}님을 ${roleText}(으)로 승인하시겠습니까?`)) {
-                                      approveMutation.mutate({ userId: user.id, role: user.requested_role });
-                                    }
-                                  }}
+                                  onClick={() => handleApprove(user, user.requested_role)}
                                   className="text-green-600 hover:text-green-700 text-sm font-medium"
                                   disabled={approveMutation.isPending}
                                 >
-                                  {user.requested_role === 'instructor' ? '강사 승인' : '회원 승인'}
+                                  {user.requested_role === 'instructor' ? '클럽장 승인' : '회원 승인'}
                                 </button>
                                 {user.requested_role === 'instructor' && (
                                   <button
-                                    onClick={() => {
-                                      if (window.confirm(`${user.username}님을 일반 회원으로 승인하시겠습니까?`)) {
-                                        approveMutation.mutate({ userId: user.id, role: 'member' });
-                                      }
-                                    }}
+                                    onClick={() => handleApprove(user, 'member')}
                                     className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                                     disabled={approveMutation.isPending}
                                   >
@@ -1109,7 +1279,7 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-lg shadow">
             <div className="p-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold">채팅방 목록</h2>
+              <h2 className="text-lg font-semibold">클럽 목록</h2>
             </div>
             <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
               {roomsLoading ? (
@@ -1137,7 +1307,7 @@ export default function AdminDashboard() {
                     {room.is_public ? (
                       <button
                         onClick={() => {
-                          if (window.confirm(`"${room.name}" 채팅방의 모든 메시지를 삭제하시겠습니까?\n채팅방은 유지됩니다.`)) {
+                          if (window.confirm(`"${room.name}" 클럽의 모든 메시지를 삭제하시겠습니까?\n클럽은 유지됩니다.`)) {
                             clearMessagesMutation.mutate(room.id);
                           }
                         }}
@@ -1148,7 +1318,7 @@ export default function AdminDashboard() {
                     ) : (
                       <button
                         onClick={() => {
-                          if (window.confirm(`"${room.name}" 채팅방을 삭제하시겠습니까?\n모든 메시지가 함께 삭제됩니다.`)) {
+                          if (window.confirm(`"${room.name}" 클럽을 삭제하시겠습니까?\n모든 메시지가 함께 삭제됩니다.`)) {
                             deleteChatRoomMutation.mutate(room.id);
                           }
                         }}
@@ -1160,7 +1330,7 @@ export default function AdminDashboard() {
                   </div>
                 ))
               ) : (
-                <div className="p-8 text-center text-gray-500">채팅방이 없습니다.</div>
+                <div className="p-8 text-center text-gray-500">클럽이 없습니다.</div>
               )}
             </div>
           </div>
@@ -1207,10 +1377,10 @@ export default function AdminDashboard() {
 
           {selectedRoom && (
             <>
-              {/* 채팅 내용 보기 */}
+              {/* 클럽 내용 보기 */}
               <div className="lg:col-span-2 bg-white rounded-lg shadow">
                 <div className="p-4 border-b border-gray-200">
-                  <h2 className="text-lg font-semibold">채팅 내용 - {chatRooms?.find((r) => r.id === selectedRoom)?.name}</h2>
+                  <h2 className="text-lg font-semibold">클럽 내용 - {chatRooms?.find((r) => r.id === selectedRoom)?.name}</h2>
                 </div>
                 <div className="p-4 max-h-96 overflow-y-auto bg-gray-50">
                   {messagesLoading ? (
@@ -1248,6 +1418,334 @@ export default function AdminDashboard() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* Banners Tab */}
+      {activeTab === 'banners' && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+            <h2 className="text-lg font-semibold">배너 목록</h2>
+            <button
+              onClick={() => {
+                if (showBannerForm) {
+                  setBannerImage([]);
+                  setBannerPhone('');
+                }
+                setShowBannerForm(!showBannerForm);
+              }}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
+            >
+              {showBannerForm ? '취소' : '새 배너'}
+            </button>
+          </div>
+
+          {showBannerForm && (
+            <form onSubmit={handleBannerSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
+              <div className="space-y-4">
+                <div>
+                  <FileDropZone
+                    label="배너 이미지"
+                    name="image"
+                    multiple={false}
+                    files={bannerImage}
+                    onFilesChange={setBannerImage}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">권장 사이즈: 1200 x 300px (가로형)</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">간단 문구</label>
+                  <input
+                    type="text"
+                    name="description"
+                    required
+                    maxLength={100}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    placeholder="배너에 표시될 문구"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">전화번호</label>
+                  <input
+                    type="text"
+                    name="phone_number"
+                    required
+                    maxLength={20}
+                    value={bannerPhone}
+                    onChange={(e) => setBannerPhone(formatPhoneNumber(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    placeholder="02-1234-5678"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="is_active"
+                    id="banner_is_active"
+                    defaultChecked
+                    className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="banner_is_active" className="text-sm text-gray-700">활성화</label>
+                </div>
+                <button
+                  type="submit"
+                  disabled={createBannerMutation.isPending || bannerImage.length === 0}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                >
+                  {createBannerMutation.isPending ? '저장 중...' : '저장'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="divide-y divide-gray-200">
+            {bannersLoading ? (
+              <div className="p-8 text-center text-gray-500">로딩 중...</div>
+            ) : banners && banners.length > 0 ? (
+              banners.map((banner, index) => (
+                <div key={banner.id} className={`p-4 flex justify-between items-center ${!banner.is_active ? 'bg-gray-100' : ''}`}>
+                  <div className="flex items-center gap-4">
+                    <img src={banner.image} alt={banner.description} className="w-24 h-16 object-cover rounded" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        {!banner.is_active && (
+                          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-gray-200 text-gray-600">비활성</span>
+                        )}
+                        <span className="font-medium">{banner.description}</span>
+                      </div>
+                      <div className="text-sm text-gray-500 mt-1">
+                        {banner.phone_number} | 순서: {banner.order}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => moveBannerUpMutation.mutate(banner.id)}
+                      disabled={index === 0}
+                      className="px-2 py-1 rounded text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-30"
+                    >
+                      위
+                    </button>
+                    <button
+                      onClick={() => moveBannerDownMutation.mutate(banner.id)}
+                      disabled={index === banners.length - 1}
+                      className="px-2 py-1 rounded text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-30"
+                    >
+                      아래
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('정말 삭제하시겠습니까?')) {
+                          deleteBannerMutation.mutate(banner.id);
+                        }
+                      }}
+                      className="px-3 py-1 rounded text-sm bg-red-100 text-red-700 hover:bg-red-200"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center text-gray-500">배너가 없습니다.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Organizations Tab */}
+      {activeTab === 'organizations' && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+            <h2 className="text-lg font-semibold">유관기관 목록</h2>
+            <button
+              onClick={() => {
+                if (showOrgForm) {
+                  setOrgLogo([]);
+                }
+                setShowOrgForm(!showOrgForm);
+              }}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
+            >
+              {showOrgForm ? '취소' : '새 유관기관'}
+            </button>
+          </div>
+
+          {showOrgForm && (
+            <form onSubmit={handleOrgSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">기관명</label>
+                  <input
+                    type="text"
+                    name="name"
+                    required
+                    maxLength={100}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    placeholder="기관 이름"
+                  />
+                </div>
+                <div>
+                  <FileDropZone
+                    label="로고 이미지"
+                    name="logo"
+                    multiple={false}
+                    files={orgLogo}
+                    onFilesChange={setOrgLogo}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">권장 사이즈: 200 x 200px (정사각형)</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">링크</label>
+                  <input
+                    type="url"
+                    name="link"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    placeholder="https://example.com"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="is_active"
+                    id="org_is_active"
+                    defaultChecked
+                    className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="org_is_active" className="text-sm text-gray-700">활성화</label>
+                </div>
+                <button
+                  type="submit"
+                  disabled={createOrgMutation.isPending || orgLogo.length === 0}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                >
+                  {createOrgMutation.isPending ? '저장 중...' : '저장'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="divide-y divide-gray-200">
+            {orgsLoading ? (
+              <div className="p-8 text-center text-gray-500">로딩 중...</div>
+            ) : organizations && organizations.length > 0 ? (
+              organizations.map((org, index) => (
+                <div key={org.id} className={`p-4 flex justify-between items-center ${!org.is_active ? 'bg-gray-100' : ''}`}>
+                  <div className="flex items-center gap-4">
+                    <img src={org.logo} alt={org.name} className="w-16 h-16 object-contain rounded border" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        {!org.is_active && (
+                          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-gray-200 text-gray-600">비활성</span>
+                        )}
+                        <span className="font-medium">{org.name}</span>
+                      </div>
+                      <div className="text-sm text-gray-500 mt-1">
+                        <a href={org.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          {org.link}
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => moveOrgUpMutation.mutate(org.id)}
+                      disabled={index === 0}
+                      className="px-2 py-1 rounded text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-30"
+                    >
+                      위
+                    </button>
+                    <button
+                      onClick={() => moveOrgDownMutation.mutate(org.id)}
+                      disabled={index === organizations.length - 1}
+                      className="px-2 py-1 rounded text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-30"
+                    >
+                      아래
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('정말 삭제하시겠습니까?')) {
+                          deleteOrgMutation.mutate(org.id);
+                        }
+                      }}
+                      className="px-3 py-1 rounded text-sm bg-red-100 text-red-700 hover:bg-red-200"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center text-gray-500">유관기관이 없습니다.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Club Assignment Modal */}
+      {showClubModal && pendingApprovalUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-lg font-semibold">클럽 배정</h3>
+              <button
+                onClick={() => {
+                  setShowClubModal(false);
+                  setPendingApprovalUser(null);
+                  setPendingApprovalRole('member');
+                  setSelectedClubId(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                X
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-gray-600 mb-4">
+                <strong>{pendingApprovalUser.username}</strong>님은 클럽 가입을 희망합니다.
+                <br />배정할 클럽을 선택해주세요.
+              </p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">클럽 선택</label>
+                <select
+                  value={selectedClubId || ''}
+                  onChange={(e) => setSelectedClubId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                >
+                  <option value="">클럽 미배정</option>
+                  {allChatRooms?.filter((r) => !r.is_public).map((room) => (
+                    <option key={room.id} value={room.id}>
+                      {room.name} ({room.member_count}명)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  클럽을 선택하지 않으면 클럽 미배정 상태로 승인됩니다.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setShowClubModal(false);
+                    setPendingApprovalUser(null);
+                    setSelectedClubId(null);
+                    setPendingApprovalRole('member');
+                  }}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleApproveWithClub}
+                  disabled={approveMutation.isPending}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {approveMutation.isPending ? '처리 중...' : '승인'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

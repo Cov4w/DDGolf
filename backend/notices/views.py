@@ -2,10 +2,11 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Notice
+from .models import Notice, Banner, Organization
 from .serializers import (
     NoticeListSerializer, NoticeDetailSerializer,
-    NoticeCreateSerializer, NoticeAdminSerializer
+    NoticeCreateSerializer, NoticeAdminSerializer,
+    BannerSerializer, OrganizationSerializer
 )
 
 
@@ -86,3 +87,85 @@ class NoticeViewSet(viewsets.ModelViewSet):
         queryset = Notice.objects.all()
         serializer = NoticeListSerializer(queryset, many=True)
         return Response(serializer.data)
+
+
+class BannerViewSet(viewsets.ModelViewSet):
+    """배너 ViewSet"""
+    queryset = Banner.objects.all()
+    serializer_class = BannerSerializer
+    pagination_class = None  # 페이지네이션 비활성화
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
+    def get_queryset(self):
+        queryset = Banner.objects.all()
+        # 관리자가 아니면 활성화된 배너만 표시
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(is_active=True)
+        return queryset
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def move_up(self, request, pk=None):
+        """배너 순서 위로"""
+        banner = self.get_object()
+        prev_banner = Banner.objects.filter(order__lt=banner.order).order_by('-order').first()
+        if prev_banner:
+            banner.order, prev_banner.order = prev_banner.order, banner.order
+            banner.save()
+            prev_banner.save()
+        return Response({'message': '순서가 변경되었습니다.'})
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def move_down(self, request, pk=None):
+        """배너 순서 아래로"""
+        banner = self.get_object()
+        next_banner = Banner.objects.filter(order__gt=banner.order).order_by('order').first()
+        if next_banner:
+            banner.order, next_banner.order = next_banner.order, banner.order
+            banner.save()
+            next_banner.save()
+        return Response({'message': '순서가 변경되었습니다.'})
+
+
+class OrganizationViewSet(viewsets.ModelViewSet):
+    """유관기관 ViewSet"""
+    queryset = Organization.objects.all()
+    serializer_class = OrganizationSerializer
+    pagination_class = None  # 페이지네이션 비활성화
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
+    def get_queryset(self):
+        queryset = Organization.objects.all()
+        # 관리자가 아니면 활성화된 유관기관만 표시
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(is_active=True)
+        return queryset
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def move_up(self, request, pk=None):
+        """유관기관 순서 위로"""
+        org = self.get_object()
+        prev_org = Organization.objects.filter(order__lt=org.order).order_by('-order').first()
+        if prev_org:
+            org.order, prev_org.order = prev_org.order, org.order
+            org.save()
+            prev_org.save()
+        return Response({'message': '순서가 변경되었습니다.'})
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def move_down(self, request, pk=None):
+        """유관기관 순서 아래로"""
+        org = self.get_object()
+        next_org = Organization.objects.filter(order__gt=org.order).order_by('order').first()
+        if next_org:
+            org.order, next_org.order = next_org.order, org.order
+            org.save()
+            next_org.save()
+        return Response({'message': '순서가 변경되었습니다.'})

@@ -47,6 +47,7 @@ export default function Register() {
     password2: '',
     phone: '',
     requested_role: 'member' as 'instructor' | 'member',
+    wants_club_membership: false,
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -154,6 +155,7 @@ export default function Register() {
         password: formData.password,
         phone: formData.phone || undefined,
         requested_role: formData.requested_role,
+        wants_club_membership: formData.wants_club_membership,
       });
       alert('회원가입이 완료되었습니다. 관리자 승인 후 이용 가능합니다.');
       navigate('/login');
@@ -259,8 +261,41 @@ export default function Register() {
                 required
               >
                 <option value="member">일반 회원</option>
-                <option value="instructor">강사</option>
+                <option value="instructor">클럽장</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                클럽 가입 여부 *
+              </label>
+              <div className="flex gap-4">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="wants_club_membership"
+                    value="true"
+                    checked={formData.wants_club_membership === true}
+                    onChange={() => setFormData({ ...formData, wants_club_membership: true })}
+                    className="mr-2 text-green-600 focus:ring-green-500"
+                  />
+                  <span className="text-gray-700">클럽 가입 희망</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="wants_club_membership"
+                    value="false"
+                    checked={formData.wants_club_membership === false}
+                    onChange={() => setFormData({ ...formData, wants_club_membership: false })}
+                    className="mr-2 text-green-600 focus:ring-green-500"
+                  />
+                  <span className="text-gray-700">클럽 미가입</span>
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                클럽 미가입 시 공용 클럽만 이용 가능합니다.
+              </p>
             </div>
 
             <div>

@@ -27,9 +27,11 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'email', 'username', 'phone', 'profile_image',
                   'role', 'role_display', 'requested_role', 'requested_role_display',
-                  'is_approved', 'is_email_verified', 'social_provider', 'created_at']
+                  'is_approved', 'is_email_verified', 'social_provider', 'created_at',
+                  'wants_club_membership', 'assigned_club']
         read_only_fields = ['id', 'role', 'role_display', 'requested_role_display',
-                           'is_approved', 'is_email_verified', 'social_provider', 'created_at']
+                           'is_approved', 'is_email_verified', 'social_provider', 'created_at',
+                           'assigned_club']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -37,14 +39,15 @@ class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True)
     requested_role = serializers.ChoiceField(
-        choices=[('instructor', '강사'), ('member', '일반 회원')],
+        choices=[('instructor', '클럽장'), ('member', '일반 회원')],
         default='member'
     )
     verification_code = serializers.CharField(write_only=True, max_length=6, min_length=6)
+    wants_club_membership = serializers.BooleanField(default=False)
 
     class Meta:
         model = User
-        fields = ['email', 'username', 'password', 'password2', 'phone', 'requested_role', 'verification_code']
+        fields = ['email', 'username', 'password', 'password2', 'phone', 'requested_role', 'verification_code', 'wants_club_membership']
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
@@ -80,13 +83,14 @@ class SimpleRegisterSerializer(serializers.ModelSerializer):
     """간편 회원가입 시리얼라이저 (이메일 인증 없음)"""
     password = serializers.CharField(write_only=True, validators=[validate_password])
     requested_role = serializers.ChoiceField(
-        choices=[('instructor', '강사'), ('member', '일반 회원')],
+        choices=[('instructor', '클럽장'), ('member', '일반 회원')],
         default='member'
     )
+    wants_club_membership = serializers.BooleanField(default=False)
 
     class Meta:
         model = User
-        fields = ['email', 'username', 'password', 'phone', 'requested_role']
+        fields = ['email', 'username', 'password', 'phone', 'requested_role', 'wants_club_membership']
 
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():
@@ -120,5 +124,6 @@ class AdminUserSerializer(serializers.ModelSerializer):
         fields = ['id', 'email', 'username', 'phone', 'profile_image',
                   'role', 'role_display', 'requested_role', 'requested_role_display',
                   'is_approved', 'is_email_verified', 'social_provider',
-                  'is_active', 'created_at', 'last_login']
+                  'is_active', 'created_at', 'last_login',
+                  'wants_club_membership', 'assigned_club']
         read_only_fields = ['id', 'email', 'created_at', 'last_login']

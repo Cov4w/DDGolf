@@ -14,6 +14,8 @@ export interface User {
   is_email_verified?: boolean;
   social_provider?: string | null;
   created_at: string;
+  wants_club_membership?: boolean;
+  assigned_club?: number | null;
 }
 
 // 인증
@@ -166,4 +168,25 @@ export interface PaginatedResponse<T> {
   next: string | null;
   previous: string | null;
   results: T[];
+}
+
+// 배너
+export interface Banner {
+  id: number;
+  image: string;
+  phone_number: string;
+  description: string;
+  order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+// 유관기관
+export interface Organization {
+  id: number;
+  name: string;
+  logo: string;
+  link: string;
+  order: number;
+  is_active: boolean;
 }

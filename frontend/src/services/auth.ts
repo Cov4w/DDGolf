@@ -82,6 +82,7 @@ export const authService = {
     password: string;
     phone?: string;
     requested_role: 'instructor' | 'member';
+    wants_club_membership?: boolean;
   }): Promise<User> => {
     const response = await api.post('/accounts/register/simple/', data);
     return response.data;

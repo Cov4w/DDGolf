@@ -257,6 +257,8 @@ class UserApproveView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def post(self, request, pk):
+        from messenger.models import ChatRoom, ChatRoomMembership
+
         try:
             user = User.objects.get(pk=pk)
             user.is_approved = True
@@ -265,12 +267,25 @@ class UserApproveView(APIView):
                 user.role = approved_role
             else:
                 user.role = user.requested_role
+
+            # 클럽 배정 로직
+            assigned_club_id = request.data.get('assigned_club')
+            if assigned_club_id:
+                try:
+                    club = ChatRoom.objects.get(pk=assigned_club_id)
+                    user.assigned_club = club
+                    # 클럽 멤버십 자동 생성
+                    ChatRoomMembership.objects.get_or_create(room=club, user=user)
+                except ChatRoom.DoesNotExist:
+                    pass
+
             user.save()
             role_display = user.get_role_display()
             return Response({
                 'message': f'회원이 {role_display}(으)로 승인되었습니다.',
                 'role': user.role,
-                'role_display': role_display
+                'role_display': role_display,
+                'assigned_club': user.assigned_club_id
             })
         except User.DoesNotExist:
             return Response(

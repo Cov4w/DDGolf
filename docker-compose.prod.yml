@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # Database - PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: ddgolf-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=ddgolf
+      - POSTGRES_USER=ddgolf
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-ddgolf_secure_password_2024}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ddgolf"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend - Django
+  backend:
+    image: cov4/ddgolf-backend:latest
+    container_name: ddgolf-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY:-django-secret-key-change-in-production}
+      - ALLOWED_HOSTS=localhost,127.0.0.1,backend,ddgolf.kr,www.ddgolf.kr
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER:-}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD:-}
+      # PostgreSQL 연결 설정
+      - DB_ENGINE=postgresql
+      - DB_NAME=ddgolf
+      - DB_USER=ddgolf
+      - DB_PASSWORD=${DB_PASSWORD:-ddgolf_secure_password_2024}
+      - DB_HOST=db
+      - DB_PORT=5432
+    volumes:
+      - backend_media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Frontend - React + Nginx
+  frontend:
+    image: cov4/ddgolf-frontend:latest
+    container_name: ddgolf-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  backend_media:

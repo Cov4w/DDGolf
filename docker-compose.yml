@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Backend - Django
+  backend:
+    platform: linux/amd64
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ddgolf-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY:-django-secret-key-change-in-production-1234567890}
+      - ALLOWED_HOSTS=localhost,127.0.0.1,backend,ddgolf.com,www.ddgolf.com
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER:-}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD:-}
+    volumes:
+      - backend_media:/app/media
+      - sqlite_data:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/accounts/profile/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend - React + Nginx
+  frontend:
+    platform: linux/amd64
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-/api}
+        - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID:-}
+    container_name: ddgolf-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  backend_media:
+  sqlite_data:

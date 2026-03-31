@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { User, Notice, Album, ChatRoom, Message } from '../../types';
+import type { User, Notice, Album, ChatRoom, Message, Banner, Organization } from '../../types';
 import Loading from '../../components/common/Loading';
 import { noticesService } from '../../services/notices';
 
@@ -185,38 +185,75 @@ export default function AdminDashboard() {
   const [coverImage, setCoverImage] = useState<File[]>([]);
   const [albumPhotos, setAlbumPhotos] = useState<File[]>([]);
   const [showBannerForm, setShowBannerForm] = useState(false);
+  const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [showOrgForm, setShowOrgForm] = useState(false);
+  const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
   const [bannerImage, setBannerImage] = useState<File[]>([]);
   const [orgLogo, setOrgLogo] = useState<File[]>([]);
   const [showClubModal, setShowClubModal] = useState(false);
   const [pendingApprovalUser, setPendingApprovalUser] = useState<User | null>(null);
   const [pendingApprovalRole, setPendingApprovalRole] = useState<string>('member');
   const [selectedClubId, setSelectedClubId] = useState<number | null>(null);
-  const [bannerPhone, setBannerPhone] = useState('');
+  const [bannerPhonePrefix, setBannerPhonePrefix] = useState('02');
+  const [bannerPhoneNumber, setBannerPhoneNumber] = useState('');
   const queryClient = useQueryClient();
 
-  // 전화번호 자동 포맷팅
-  const formatPhoneNumber = (value: string) => {
+  const PHONE_PREFIXES = [
+    { value: '010', label: '010 (휴대폰)' },
+    { value: '02', label: '02 (서울)' },
+    { value: '031', label: '031 (경기)' },
+    { value: '032', label: '032 (인천)' },
+    { value: '033', label: '033 (강원)' },
+    { value: '041', label: '041 (충남)' },
+    { value: '042', label: '042 (대전)' },
+    { value: '043', label: '043 (충북)' },
+    { value: '044', label: '044 (세종)' },
+    { value: '051', label: '051 (부산)' },
+    { value: '052', label: '052 (울산)' },
+    { value: '053', label: '053 (대구)' },
+    { value: '054', label: '054 (경북)' },
+    { value: '055', label: '055 (경남)' },
+    { value: '061', label: '061 (전남)' },
+    { value: '062', label: '062 (광주)' },
+    { value: '063', label: '063 (전북)' },
+    { value: '064', label: '064 (제주)' },
+    { value: '070', label: '070 (인터넷전화)' },
+  ];
+
+  const formatPhoneSuffix = (value: string, prefix: string) => {
     const numbers = value.replace(/[^\d]/g, '');
-    if (numbers.length <= 2) return numbers;
-    if (numbers.length <= 6) return `${numbers.slice(0, 2)}-${numbers.slice(2)}`;
-    if (numbers.length <= 10) return `${numbers.slice(0, 2)}-${numbers.slice(2, 6)}-${numbers.slice(6)}`;
-    // 010 등 휴대폰 번호
-    if (numbers.startsWith('01')) {
-      if (numbers.length <= 3) return numbers;
-      if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
-      return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
+    if (prefix === '02') {
+      // 02: 3자리-4자리 또는 4자리-4자리
+      const limited = numbers.slice(0, 8);
+      if (limited.length <= 3) return limited;
+      if (limited.length <= 7) return `${limited.slice(0, 3)}-${limited.slice(3)}`;
+      return `${limited.slice(0, 4)}-${limited.slice(4)}`;
     }
-    // 02 서울 지역번호
+    // 3자리 지역번호/010: 3자리-4자리 또는 4자리-4자리
+    const limited = numbers.slice(0, 8);
+    if (limited.length <= 3) return limited;
+    if (limited.length <= 7) return `${limited.slice(0, 3)}-${limited.slice(3)}`;
+    return `${limited.slice(0, 4)}-${limited.slice(4)}`;
+  };
+
+  const parsePhoneNumber = (phone: string) => {
+    const numbers = phone.replace(/[^\d]/g, '');
     if (numbers.startsWith('02')) {
-      if (numbers.length <= 2) return numbers;
-      if (numbers.length <= 6) return `${numbers.slice(0, 2)}-${numbers.slice(2)}`;
-      return `${numbers.slice(0, 2)}-${numbers.slice(2, 6)}-${numbers.slice(6, 10)}`;
+      return { prefix: '02', suffix: formatPhoneSuffix(numbers.slice(2), '02') };
     }
-    // 기타 지역번호 (031, 032, etc.)
-    if (numbers.length <= 3) return numbers;
-    if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
-    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
+    if (numbers.length >= 3) {
+      const prefix = numbers.slice(0, 3);
+      const knownPrefix = PHONE_PREFIXES.find(p => p.value === prefix);
+      if (knownPrefix) {
+        return { prefix, suffix: formatPhoneSuffix(numbers.slice(3), prefix) };
+      }
+    }
+    return { prefix: '02', suffix: formatPhoneSuffix(numbers, '02') };
+  };
+
+  const resetBannerPhone = () => {
+    setBannerPhonePrefix('02');
+    setBannerPhoneNumber('');
   };
 
   // Users Query
@@ -461,7 +498,18 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['adminBanners'] });
       setShowBannerForm(false);
       setBannerImage([]);
-      setBannerPhone('');
+      resetBannerPhone();
+    },
+  });
+
+  const updateBannerMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: FormData }) => noticesService.updateBanner(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminBanners'] });
+      setEditingBanner(null);
+      setShowBannerForm(false);
+      setBannerImage([]);
+      resetBannerPhone();
     },
   });
 
@@ -490,6 +538,16 @@ export default function AdminDashboard() {
     },
   });
 
+  const updateOrgMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: FormData }) => noticesService.updateOrganization(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminOrganizations'] });
+      setEditingOrg(null);
+      setShowOrgForm(false);
+      setOrgLogo([]);
+    },
+  });
+
   const deleteOrgMutation = useMutation({
     mutationFn: (id: number) => noticesService.deleteOrganization(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminOrganizations'] }),
@@ -513,7 +571,10 @@ export default function AdminDashboard() {
     const form = e.currentTarget;
     const formData = new FormData();
 
-    formData.append('phone_number', form.querySelector<HTMLInputElement>('[name="phone_number"]')?.value || '');
+    const fullPhone = bannerPhoneNumber
+      ? `${bannerPhonePrefix}-${bannerPhoneNumber}`
+      : bannerPhonePrefix;
+    formData.append('phone_number', fullPhone);
     formData.append('description', form.querySelector<HTMLInputElement>('[name="description"]')?.value || '');
     formData.append('is_active', form.querySelector<HTMLInputElement>('[name="is_active"]')?.checked ? 'true' : 'false');
 
@@ -521,7 +582,11 @@ export default function AdminDashboard() {
       formData.append('image', bannerImage[0]);
     }
 
-    createBannerMutation.mutate(formData);
+    if (editingBanner) {
+      updateBannerMutation.mutate({ id: editingBanner.id, data: formData });
+    } else {
+      createBannerMutation.mutate(formData);
+    }
   };
 
   const handleOrgSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -537,7 +602,11 @@ export default function AdminDashboard() {
       formData.append('logo', orgLogo[0]);
     }
 
-    createOrgMutation.mutate(formData);
+    if (editingOrg) {
+      updateOrgMutation.mutate({ id: editingOrg.id, data: formData });
+    } else {
+      createOrgMutation.mutate(formData);
+    }
   };
 
   // 회원 승인 핸들러 - 클럽 가입 희망 시 모달 표시
@@ -1428,19 +1497,20 @@ export default function AdminDashboard() {
             <h2 className="text-lg font-semibold">배너 목록</h2>
             <button
               onClick={() => {
-                if (showBannerForm) {
+                if (showBannerForm && !editingBanner) {
                   setBannerImage([]);
-                  setBannerPhone('');
+                  resetBannerPhone();
                 }
+                setEditingBanner(null);
                 setShowBannerForm(!showBannerForm);
               }}
               className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
             >
-              {showBannerForm ? '취소' : '새 배너'}
+              {showBannerForm && !editingBanner ? '취소' : '새 배너'}
             </button>
           </div>
 
-          {showBannerForm && (
+          {(showBannerForm || editingBanner) && (
             <form onSubmit={handleBannerSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
               <div className="space-y-4">
                 <div>
@@ -1451,6 +1521,12 @@ export default function AdminDashboard() {
                     files={bannerImage}
                     onFilesChange={setBannerImage}
                   />
+                  {editingBanner && bannerImage.length === 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-500 mb-1">현재 이미지 (변경하려면 위에서 새 이미지를 선택하세요)</p>
+                      <img src={editingBanner.image} alt={editingBanner.description} className="w-48 h-16 object-cover rounded border" />
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">권장 사이즈: 1200 x 300px (가로형)</p>
                 </div>
                 <div>
@@ -1460,40 +1536,75 @@ export default function AdminDashboard() {
                     name="description"
                     required
                     maxLength={100}
+                    defaultValue={editingBanner?.description || ''}
+                    key={editingBanner?.id || 'new'}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
                     placeholder="배너에 표시될 문구"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">전화번호</label>
-                  <input
-                    type="text"
-                    name="phone_number"
-                    required
-                    maxLength={20}
-                    value={bannerPhone}
-                    onChange={(e) => setBannerPhone(formatPhoneNumber(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                    placeholder="02-1234-5678"
-                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={bannerPhonePrefix}
+                      onChange={(e) => setBannerPhonePrefix(e.target.value)}
+                      className="w-44 px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    >
+                      {PHONE_PREFIXES.map((p) => (
+                        <option key={p.value} value={p.value}>{p.label}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      required
+                      value={bannerPhoneNumber}
+                      onChange={(e) => setBannerPhoneNumber(formatPhoneSuffix(e.target.value, bannerPhonePrefix))}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                      placeholder="123-4567"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    입력 예시: {bannerPhonePrefix}-{bannerPhoneNumber || 'XXX-XXXX'}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     name="is_active"
                     id="banner_is_active"
-                    defaultChecked
+                    defaultChecked={editingBanner ? editingBanner.is_active : true}
+                    key={editingBanner ? `active-${editingBanner.id}` : 'active-new'}
                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
                   />
                   <label htmlFor="banner_is_active" className="text-sm text-gray-700">활성화</label>
                 </div>
-                <button
-                  type="submit"
-                  disabled={createBannerMutation.isPending || bannerImage.length === 0}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
-                >
-                  {createBannerMutation.isPending ? '저장 중...' : '저장'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={createBannerMutation.isPending || updateBannerMutation.isPending || (!editingBanner && bannerImage.length === 0)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {createBannerMutation.isPending || updateBannerMutation.isPending
+                      ? '저장 중...'
+                      : editingBanner
+                        ? '수정'
+                        : '저장'}
+                  </button>
+                  {editingBanner && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingBanner(null);
+                        setShowBannerForm(false);
+                        setBannerImage([]);
+                        resetBannerPhone();
+                      }}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-400"
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
               </div>
             </form>
           )}
@@ -1519,6 +1630,19 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setShowBannerForm(false);
+                        setEditingBanner(banner);
+                        const parsed = parsePhoneNumber(banner.phone_number);
+                        setBannerPhonePrefix(parsed.prefix);
+                        setBannerPhoneNumber(parsed.suffix);
+                        setBannerImage([]);
+                      }}
+                      className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    >
+                      수정
+                    </button>
                     <button
                       onClick={() => moveBannerUpMutation.mutate(banner.id)}
                       disabled={index === 0}
@@ -1560,18 +1684,19 @@ export default function AdminDashboard() {
             <h2 className="text-lg font-semibold">유관기관 목록</h2>
             <button
               onClick={() => {
-                if (showOrgForm) {
+                if (showOrgForm && !editingOrg) {
                   setOrgLogo([]);
                 }
+                setEditingOrg(null);
                 setShowOrgForm(!showOrgForm);
               }}
               className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
             >
-              {showOrgForm ? '취소' : '새 유관기관'}
+              {showOrgForm && !editingOrg ? '취소' : '새 유관기관'}
             </button>
           </div>
 
-          {showOrgForm && (
+          {(showOrgForm || editingOrg) && (
             <form onSubmit={handleOrgSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
               <div className="space-y-4">
                 <div>
@@ -1581,6 +1706,8 @@ export default function AdminDashboard() {
                     name="name"
                     required
                     maxLength={100}
+                    defaultValue={editingOrg?.name || ''}
+                    key={editingOrg?.id || 'new'}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
                     placeholder="기관 이름"
                   />
@@ -1593,6 +1720,12 @@ export default function AdminDashboard() {
                     files={orgLogo}
                     onFilesChange={setOrgLogo}
                   />
+                  {editingOrg && orgLogo.length === 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-500 mb-1">현재 로고 (변경하려면 위에서 새 이미지를 선택하세요)</p>
+                      <img src={editingOrg.logo} alt={editingOrg.name} className="w-16 h-16 object-contain rounded border" />
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">권장 사이즈: 200 x 200px (정사각형)</p>
                 </div>
                 <div>
@@ -1601,6 +1734,8 @@ export default function AdminDashboard() {
                     type="url"
                     name="link"
                     required
+                    defaultValue={editingOrg?.link || ''}
+                    key={editingOrg ? `link-${editingOrg.id}` : 'link-new'}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
                     placeholder="https://example.com"
                   />
@@ -1610,18 +1745,38 @@ export default function AdminDashboard() {
                     type="checkbox"
                     name="is_active"
                     id="org_is_active"
-                    defaultChecked
+                    defaultChecked={editingOrg ? editingOrg.is_active : true}
+                    key={editingOrg ? `active-${editingOrg.id}` : 'active-new'}
                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
                   />
                   <label htmlFor="org_is_active" className="text-sm text-gray-700">활성화</label>
                 </div>
-                <button
-                  type="submit"
-                  disabled={createOrgMutation.isPending || orgLogo.length === 0}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
-                >
-                  {createOrgMutation.isPending ? '저장 중...' : '저장'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={createOrgMutation.isPending || updateOrgMutation.isPending || (!editingOrg && orgLogo.length === 0)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {createOrgMutation.isPending || updateOrgMutation.isPending
+                      ? '저장 중...'
+                      : editingOrg
+                        ? '수정'
+                        : '저장'}
+                  </button>
+                  {editingOrg && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingOrg(null);
+                        setShowOrgForm(false);
+                        setOrgLogo([]);
+                      }}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-400"
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
               </div>
             </form>
           )}
@@ -1649,6 +1804,16 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setShowOrgForm(false);
+                        setEditingOrg(org);
+                        setOrgLogo([]);
+                      }}
+                      className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    >
+                      수정
+                    </button>
                     <button
                       onClick={() => moveOrgUpMutation.mutate(org.id)}
                       disabled={index === 0}

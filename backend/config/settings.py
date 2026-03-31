@@ -173,6 +173,9 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
+# Proxy SSL 설정 (nginx에서 HTTPS 처리)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Email Configuration

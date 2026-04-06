@@ -426,6 +426,21 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data)
 
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def set_icon(self, request, pk=None):
+        """클럽 아이콘 설정 (관리자 전용)"""
+        room = self.get_object()
+        icon = request.FILES.get('icon')
+        if icon:
+            room.icon = icon
+            room.save()
+            return Response({'message': '아이콘이 설정되었습니다.', 'icon': room.icon.url})
+        elif 'remove_icon' in request.data:
+            room.icon = None
+            room.save()
+            return Response({'message': '아이콘이 제거되었습니다.', 'icon': None})
+        return Response({'error': '아이콘 파일이 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class ChatRoomInvitationViewSet(viewsets.ReadOnlyModelViewSet):
     """채팅방 초대 ViewSet"""
@@ -569,6 +584,16 @@ class TotalUnreadCountView(APIView):
             'total_unread': total_unread,
             'pending_invitations': pending_invitations
         })
+
+
+class PublicClubListView(APIView):
+    """공개 클럽 목록 API (비로그인 가능)"""
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        clubs = ChatRoom.objects.filter(is_public=False).values('id', 'name', 'icon')
+        return Response(list(clubs))
 
 
 class ChatBanViewSet(viewsets.ModelViewSet):

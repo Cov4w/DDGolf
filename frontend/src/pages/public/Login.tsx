@@ -131,11 +131,9 @@ export default function Login() {
     <div className="min-h-[600px] flex items-center justify-center bg-gray-50 py-12 px-4">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-green-700 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-2xl">⛳</span>
-          </div>
+          <img src="/images/logo.png" alt="DDGA 로고" className="w-16 h-16 object-contain mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900">로그인</h1>
-          <p className="mt-2 text-gray-600">DDGolf 협회에 오신 것을 환영합니다</p>
+          <p className="mt-2 text-gray-600">대덕구골프협회에 오신 것을 환영합니다</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-8">

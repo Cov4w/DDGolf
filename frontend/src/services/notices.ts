@@ -1,5 +1,5 @@
 import api from './api';
-import type { Notice, PaginatedResponse, Banner, Organization } from '../types';
+import type { Notice, PaginatedResponse, Banner, Organization, AboutContent, Executive } from '../types';
 
 export const noticesService = {
   // 회원용 공지사항 (로그인 필요)
@@ -100,5 +100,56 @@ export const noticesService = {
 
   moveOrganizationDown: async (id: number): Promise<void> => {
     await api.post(`/notices/organizations/${id}/move_down/`);
+  },
+
+  // 협회소개 콘텐츠 API
+  getAboutContent: async (): Promise<AboutContent> => {
+    const response = await api.get('/notices/about/');
+    return response.data;
+  },
+
+  updateAboutContent: async (data: FormData): Promise<AboutContent> => {
+    const response = await api.put('/notices/about/', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  // 공개 클럽 목록 API
+  getPublicClubs: async (): Promise<{ id: number; name: string; icon: string | null }[]> => {
+    const response = await api.get('/messenger/public/clubs/');
+    return response.data;
+  },
+
+  // 협회 임원 API
+  getExecutives: async (): Promise<Executive[]> => {
+    const response = await api.get('/notices/executives/');
+    return response.data;
+  },
+
+  createExecutive: async (data: FormData): Promise<Executive> => {
+    const response = await api.post('/notices/executives/', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  updateExecutive: async (id: number, data: FormData): Promise<Executive> => {
+    const response = await api.patch(`/notices/executives/${id}/`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  deleteExecutive: async (id: number): Promise<void> => {
+    await api.delete(`/notices/executives/${id}/`);
+  },
+
+  moveExecutiveUp: async (id: number): Promise<void> => {
+    await api.post(`/notices/executives/${id}/move_up/`);
+  },
+
+  moveExecutiveDown: async (id: number): Promise<void> => {
+    await api.post(`/notices/executives/${id}/move_down/`);
   },
 };

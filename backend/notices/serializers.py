@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Notice, Banner, Organization
+from .models import Notice, Banner, Organization, AboutContent, Executive
 from accounts.serializers import UserSerializer
 
 
@@ -58,3 +58,21 @@ class OrganizationSerializer(serializers.ModelSerializer):
         model = Organization
         fields = ['id', 'name', 'logo', 'link', 'order', 'is_active']
         read_only_fields = ['id']
+
+
+class AboutContentSerializer(serializers.ModelSerializer):
+    """협회소개 콘텐츠 시리얼라이저"""
+
+    class Meta:
+        model = AboutContent
+        fields = ['greeting_text', 'greeting_author', 'greeting_image', 'updated_at']
+        read_only_fields = ['updated_at']
+
+
+class ExecutiveSerializer(serializers.ModelSerializer):
+    """협회 임원 시리얼라이저"""
+
+    class Meta:
+        model = Executive
+        fields = ['id', 'name', 'phone', 'greeting', 'photo', 'order', 'created_at']
+        read_only_fields = ['id', 'created_at']

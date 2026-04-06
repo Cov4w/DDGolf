@@ -118,6 +118,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
     """관리자용 사용자 시리얼라이저"""
     role_display = serializers.CharField(source='get_role_display', read_only=True)
     requested_role_display = serializers.CharField(source='get_requested_role_display', read_only=True)
+    assigned_club_name = serializers.CharField(source='assigned_club.name', read_only=True, default=None)
 
     class Meta:
         model = User
@@ -125,5 +126,5 @@ class AdminUserSerializer(serializers.ModelSerializer):
                   'role', 'role_display', 'requested_role', 'requested_role_display',
                   'is_approved', 'is_email_verified', 'social_provider',
                   'is_active', 'created_at', 'last_login',
-                  'wants_club_membership', 'assigned_club']
+                  'wants_club_membership', 'assigned_club', 'assigned_club_name']
         read_only_fields = ['id', 'email', 'created_at', 'last_login']

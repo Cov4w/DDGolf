@@ -16,6 +16,7 @@ export interface User {
   created_at: string;
   wants_club_membership?: boolean;
   assigned_club?: number | null;
+  assigned_club_name?: string | null;
 }
 
 // 인증
@@ -113,6 +114,7 @@ export interface Event {
   description: string;
   event_type: 'match' | 'tournament' | 'practice' | 'meeting' | 'other';
   location: string;
+  location_link: string;
   start_date: string;
   end_date: string;
   max_participants: number;
@@ -136,6 +138,7 @@ export interface ChatRoom {
   id: number;
   name: string;
   description: string;
+  icon?: string | null;
   is_group: boolean;
   is_public: boolean;
   created_by?: User;
@@ -168,6 +171,25 @@ export interface PaginatedResponse<T> {
   next: string | null;
   previous: string | null;
   results: T[];
+}
+
+// 협회소개 콘텐츠
+export interface AboutContent {
+  greeting_text: string;
+  greeting_author: string;
+  greeting_image: string | null;
+  updated_at: string;
+}
+
+// 협회 임원
+export interface Executive {
+  id: number;
+  name: string;
+  phone: string;
+  greeting: string;
+  photo: string | null;
+  order: number;
+  created_at: string;
 }
 
 // 배너

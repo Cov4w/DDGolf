@@ -21,6 +21,7 @@ class Event(models.Model):
         default=EventType.MATCH
     )
     location = models.CharField('장소', max_length=200, blank=True)
+    location_link = models.URLField('장소 링크', max_length=500, blank=True, help_text='네이버지도, 구글맵 등 링크')
     start_date = models.DateTimeField('시작 일시')
     end_date = models.DateTimeField('종료 일시')
     max_participants = models.PositiveIntegerField('최대 참가자 수', default=0)

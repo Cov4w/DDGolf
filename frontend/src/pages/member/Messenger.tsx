@@ -265,11 +265,11 @@ export default function Messenger() {
             </div>
           )}
 
-          {/* 비공용 클럽 - 클럽 가입 희망 회원만 표시 */}
-          {user?.wants_club_membership !== false && privateRooms.length > 0 && (
+          {/* 비공용 클럽 - 관리자는 모든 클럽, 일반 회원은 클럽 가입 희망 시만 표시 */}
+          {(user?.role === 'admin' || user?.wants_club_membership !== false) && privateRooms.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                {user?.role === 'instructor' ? '내 클럽' : '참여 중인 클럽'}
+                {user?.role === 'admin' ? '전체 클럽' : user?.role === 'instructor' ? '내 클럽' : '참여 중인 클럽'}
               </h3>
               {privateRooms.map((room) => (
                 <RoomButton
@@ -288,7 +288,7 @@ export default function Messenger() {
             </p>
           )}
 
-          {user?.wants_club_membership === false && privateRooms.length > 0 && (
+          {user?.role !== 'admin' && user?.wants_club_membership === false && privateRooms.length > 0 && (
             <p className="text-gray-400 text-xs text-center py-2 border-t mt-2 pt-2">
               클럽 미가입 회원은 공용 클럽만 이용 가능합니다.
             </p>
@@ -349,39 +349,65 @@ export default function Messenger() {
 
               {/* 메시지 영역 */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${
-                      msg.sender.id === user?.id ? 'justify-end' : 'justify-start'
-                    }`}
-                  >
-                    <div
-                      className={`max-w-[70%] ${
-                        msg.sender.id === user?.id
-                          ? 'bg-green-600 text-white'
-                          : 'bg-gray-100'
-                      } rounded-lg px-4 py-2 overflow-hidden`}
-                    >
-                      {msg.sender.id !== user?.id && (
-                        <div className="text-xs font-medium mb-1">
-                          {msg.sender.username}
+                {messages.map((msg, idx) => {
+                  const msgDate = new Date(msg.created_at).toLocaleDateString('ko-KR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    weekday: 'long',
+                  });
+                  const prevDate = idx > 0
+                    ? new Date(messages[idx - 1].created_at).toLocaleDateString('ko-KR', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        weekday: 'long',
+                      })
+                    : null;
+                  const showDateSeparator = idx === 0 || msgDate !== prevDate;
+
+                  return (
+                    <div key={msg.id}>
+                      {showDateSeparator && (
+                        <div className="flex items-center gap-3 my-4">
+                          <div className="flex-1 border-t border-gray-300" />
+                          <span className="text-xs text-gray-500 whitespace-nowrap">{msgDate}</span>
+                          <div className="flex-1 border-t border-gray-300" />
                         </div>
                       )}
-                      <p className="break-all whitespace-pre-wrap">{msg.content}</p>
                       <div
-                        className={`text-xs mt-1 ${
-                          msg.sender.id === user?.id ? 'text-green-200' : 'text-gray-500'
+                        className={`flex ${
+                          msg.sender.id === user?.id ? 'justify-end' : 'justify-start'
                         }`}
                       >
-                        {new Date(msg.created_at).toLocaleTimeString('ko-KR', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        <div
+                          className={`max-w-[70%] ${
+                            msg.sender.id === user?.id
+                              ? 'bg-green-600 text-white'
+                              : 'bg-gray-100'
+                          } rounded-lg px-4 py-2 overflow-hidden`}
+                        >
+                          {msg.sender.id !== user?.id && (
+                            <div className="text-xs font-medium mb-1">
+                              {msg.sender.username}
+                            </div>
+                          )}
+                          <p className="break-all whitespace-pre-wrap">{msg.content}</p>
+                          <div
+                            className={`text-xs mt-1 ${
+                              msg.sender.id === user?.id ? 'text-green-200' : 'text-gray-500'
+                            }`}
+                          >
+                            {new Date(msg.created_at).toLocaleTimeString('ko-KR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </div>
 

@@ -15,14 +15,18 @@ class EventParticipantSerializer(serializers.ModelSerializer):
 class EventListSerializer(serializers.ModelSerializer):
     created_by = UserSerializer(read_only=True)
     participant_count = serializers.SerializerMethodField()
+    pending_participant_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
-        fields = ['id', 'title', 'event_type', 'location', 'start_date', 'end_date',
-                  'max_participants', 'participant_count', 'created_by', 'created_at']
+        fields = ['id', 'title', 'event_type', 'location', 'location_link', 'start_date', 'end_date',
+                  'max_participants', 'participant_count', 'pending_participant_count', 'created_by', 'created_at']
 
     def get_participant_count(self, obj):
         return obj.participants.filter(status=EventParticipant.Status.CONFIRMED).count()
+
+    def get_pending_participant_count(self, obj):
+        return obj.participants.filter(status=EventParticipant.Status.PENDING).count()
 
 
 class EventDetailSerializer(serializers.ModelSerializer):
@@ -32,7 +36,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['id', 'title', 'description', 'event_type', 'location',
+        fields = ['id', 'title', 'description', 'event_type', 'location', 'location_link',
                   'start_date', 'end_date', 'max_participants', 'participants',
                   'is_participating', 'created_by', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
@@ -47,5 +51,5 @@ class EventDetailSerializer(serializers.ModelSerializer):
 class EventCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
-        fields = ['title', 'description', 'event_type', 'location',
+        fields = ['title', 'description', 'event_type', 'location', 'location_link',
                   'start_date', 'end_date', 'max_participants']

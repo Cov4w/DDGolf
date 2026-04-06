@@ -56,6 +56,49 @@ class Banner(models.Model):
         return self.description
 
 
+class AboutContent(models.Model):
+    """협회소개 콘텐츠 (싱글톤)"""
+    greeting_text = models.TextField('인사말 텍스트', blank=True, default='')
+    greeting_author = models.CharField('인사말 서명', max_length=100, blank=True, default='대덕구골프협회장')
+    greeting_image = models.ImageField('인사말 이미지', upload_to='about/', blank=True, null=True)
+    updated_at = models.DateTimeField('수정일', auto_now=True)
+
+    class Meta:
+        verbose_name = '협회소개 콘텐츠'
+        verbose_name_plural = '협회소개 콘텐츠'
+
+    def __str__(self):
+        return '협회소개 콘텐츠'
+
+    def save(self, *args, **kwargs):
+        # 싱글톤: 항상 pk=1로 저장
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class Executive(models.Model):
+    """협회 임원"""
+    name = models.CharField('이름', max_length=50)
+    phone = models.CharField('전화번호', max_length=20, blank=True, default='')
+    greeting = models.TextField('인사말', blank=True, default='')
+    photo = models.ImageField('프로필 사진', upload_to='executives/', blank=True, null=True)
+    order = models.PositiveIntegerField('순서', default=0)
+    created_at = models.DateTimeField('등록일', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '협회 임원'
+        verbose_name_plural = '협회 임원 목록'
+        ordering = ['order', 'created_at']
+
+    def __str__(self):
+        return self.name
+
+
 class Organization(models.Model):
     """유관기관"""
     name = models.CharField('기관명', max_length=100)

@@ -6,6 +6,7 @@ class ChatRoom(models.Model):
     """채팅방"""
     name = models.CharField('채팅방 이름', max_length=100)
     description = models.TextField('설명', blank=True)
+    icon = models.ImageField('클럽 아이콘', upload_to='club_icons/', blank=True, null=True)
     members = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         related_name='chat_rooms',

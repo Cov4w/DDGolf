@@ -1,12 +1,14 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import Notice, Banner, Organization
+from .models import Notice, Banner, Organization, AboutContent, Executive
 from .serializers import (
     NoticeListSerializer, NoticeDetailSerializer,
     NoticeCreateSerializer, NoticeAdminSerializer,
-    BannerSerializer, OrganizationSerializer
+    BannerSerializer, OrganizationSerializer, AboutContentSerializer,
+    ExecutiveSerializer
 )
 
 
@@ -168,4 +170,60 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             org.order, next_org.order = next_org.order, org.order
             org.save()
             next_org.save()
+        return Response({'message': '순서가 변경되었습니다.'})
+
+
+class AboutContentView(APIView):
+    """협회소개 콘텐츠 API (GET=AllowAny, PUT=IsAdmin)"""
+
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
+    def get(self, request):
+        about = AboutContent.load()
+        serializer = AboutContentSerializer(about)
+        return Response(serializer.data)
+
+    def put(self, request):
+        about = AboutContent.load()
+        serializer = AboutContentSerializer(about, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ExecutiveViewSet(viewsets.ModelViewSet):
+    """협회 임원 ViewSet"""
+    queryset = Executive.objects.all()
+    serializer_class = ExecutiveSerializer
+    pagination_class = None
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def move_up(self, request, pk=None):
+        """임원 순서 위로"""
+        exec_obj = self.get_object()
+        prev_obj = Executive.objects.filter(order__lt=exec_obj.order).order_by('-order').first()
+        if prev_obj:
+            exec_obj.order, prev_obj.order = prev_obj.order, exec_obj.order
+            exec_obj.save()
+            prev_obj.save()
+        return Response({'message': '순서가 변경되었습니다.'})
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def move_down(self, request, pk=None):
+        """임원 순서 아래로"""
+        exec_obj = self.get_object()
+        next_obj = Executive.objects.filter(order__gt=exec_obj.order).order_by('order').first()
+        if next_obj:
+            exec_obj.order, next_obj.order = next_obj.order, exec_obj.order
+            exec_obj.save()
+            next_obj.save()
         return Response({'message': '순서가 변경되었습니다.'})

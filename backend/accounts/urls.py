@@ -4,8 +4,10 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     RegisterView, SimpleRegisterView, ProfileView, UserListView,
     UserApproveView, UserBlockView, UserUnblockView, UserChangeRoleView,
+    UserToggleClubMembershipView, UserAssignClubView,
     SendVerificationCodeView, VerifyCodeView, GoogleLoginView,
-    VerifyPasswordView, ChangePasswordView, CustomTokenObtainPairView
+    VerifyPasswordView, ChangePasswordView, CustomTokenObtainPairView,
+    PendingUserCountView, AdminNotificationsView
 )
 
 urlpatterns = [
@@ -28,9 +30,13 @@ urlpatterns = [
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
 
     # 관리자
+    path('users/pending-count/', PendingUserCountView.as_view(), name='pending-user-count'),
+    path('users/admin-notifications/', AdminNotificationsView.as_view(), name='admin-notifications'),
     path('users/', UserListView.as_view(), name='user-list'),
     path('users/<int:pk>/approve/', UserApproveView.as_view(), name='user-approve'),
     path('users/<int:pk>/block/', UserBlockView.as_view(), name='user-block'),
     path('users/<int:pk>/unblock/', UserUnblockView.as_view(), name='user-unblock'),
     path('users/<int:pk>/change-role/', UserChangeRoleView.as_view(), name='user-change-role'),
+    path('users/<int:pk>/toggle-club-membership/', UserToggleClubMembershipView.as_view(), name='user-toggle-club-membership'),
+    path('users/<int:pk>/assign-club/', UserAssignClubView.as_view(), name='user-assign-club'),
 ]

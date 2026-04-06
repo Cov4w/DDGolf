@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Notice, Banner, Organization
+from .models import Notice, Banner, Organization, AboutContent, Executive
 
 
 @admin.register(Notice)
@@ -22,4 +22,16 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_display = ['name', 'link', 'order', 'is_active']
     list_filter = ['is_active']
     list_editable = ['order', 'is_active']
+    search_fields = ['name']
+
+
+@admin.register(AboutContent)
+class AboutContentAdmin(admin.ModelAdmin):
+    list_display = ['__str__', 'updated_at']
+
+
+@admin.register(Executive)
+class ExecutiveAdmin(admin.ModelAdmin):
+    list_display = ['name', 'phone', 'order', 'created_at']
+    list_editable = ['order']
     search_fields = ['name']

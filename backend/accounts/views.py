@@ -248,6 +248,34 @@ class UserListView(generics.ListAPIView):
     permission_classes = [permissions.IsAdminUser]
 
 
+class PendingUserCountView(APIView):
+    """미승인 회원 수 조회 API (관리자용)"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        count = User.objects.filter(is_approved=False).count()
+        return Response({'count': count})
+
+
+class AdminNotificationsView(APIView):
+    """관리자 대시보드 알림 카운트 API"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        from schedule.models import EventParticipant
+
+        pending_users = User.objects.filter(is_approved=False).count()
+        pending_participants = EventParticipant.objects.filter(
+            status=EventParticipant.Status.PENDING
+        ).count()
+
+        return Response({
+            'pending_users': pending_users,
+            'pending_participants': pending_participants,
+            'total': pending_users + pending_participants,
+        })
+
+
 class UserApproveView(APIView):
     """회원 승인 API (관리자용)"""
     permission_classes = [permissions.IsAdminUser]
@@ -317,6 +345,30 @@ class UserChangeRoleView(APIView):
             )
 
 
+class UserToggleClubMembershipView(APIView):
+    """클럽 가입 희망 여부 변경 API (관리자용)"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, pk):
+        try:
+            user = User.objects.get(pk=pk)
+            wants = request.data.get('wants_club_membership')
+            if wants is not None:
+                user.wants_club_membership = wants
+            else:
+                user.wants_club_membership = not user.wants_club_membership
+            user.save()
+            return Response({
+                'message': f'클럽 가입 희망이 {"활성화" if user.wants_club_membership else "비활성화"}되었습니다.',
+                'wants_club_membership': user.wants_club_membership,
+            })
+        except User.DoesNotExist:
+            return Response(
+                {'error': '사용자를 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
 class UserBlockView(APIView):
     """회원 차단 API (관리자용)"""
     permission_classes = [permissions.IsAdminUser]
@@ -349,6 +401,56 @@ class UserUnblockView(APIView):
                 {'error': '사용자를 찾을 수 없습니다.'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+
+class UserAssignClubView(APIView):
+    """회원 클럽 배정 API (관리자용)"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, pk):
+        from messenger.models import ChatRoom, ChatRoomMembership
+
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {'error': '사용자를 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        club_id = request.data.get('club_id')
+
+        # 기존 클럽 멤버십 제거 (이전 배정 클럽에서)
+        if user.assigned_club:
+            old_club = user.assigned_club
+            old_club.members.remove(user)
+            ChatRoomMembership.objects.filter(room=old_club, user=user).delete()
+
+        if club_id:
+            try:
+                new_club = ChatRoom.objects.get(pk=club_id)
+                user.assigned_club = new_club
+                new_club.members.add(user)
+                ChatRoomMembership.objects.get_or_create(room=new_club, user=user)
+                user.save()
+                return Response({
+                    'message': f'{user.username}님이 {new_club.name} 클럽에 배정되었습니다.',
+                    'assigned_club': new_club.id,
+                    'assigned_club_name': new_club.name,
+                })
+            except ChatRoom.DoesNotExist:
+                return Response(
+                    {'error': '클럽을 찾을 수 없습니다.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            user.assigned_club = None
+            user.save()
+            return Response({
+                'message': f'{user.username}님의 클럽 배정이 해제되었습니다.',
+                'assigned_club': None,
+                'assigned_club_name': None,
+            })
 
 
 class VerifyPasswordView(APIView):

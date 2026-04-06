@@ -99,7 +99,7 @@ export default function Home() {
 
         {/* Banner Text */}
         <div className="absolute bottom-8 left-8 text-white">
-          <h1 className="text-4xl font-bold mb-2 drop-shadow-lg">DDGolf 협회</h1>
+          <h1 className="text-4xl font-bold mb-2 drop-shadow-lg">대덕구골프협회</h1>
           <p className="text-xl drop-shadow-lg">함께하는 골프, 즐거운 라운딩</p>
         </div>
       </section>
@@ -175,7 +175,7 @@ export default function Home() {
             <div className="mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">CUSTOMER CENTER</p>
               <p className="text-sm text-gray-600 mb-2">문의전화</p>
-              <p className="text-3xl font-bold text-green-800 mb-2">02-1234-5678</p>
+              <p className="text-3xl font-bold text-green-800 mb-2">042-624-7080</p>
               <p className="text-xs text-gray-500">언제나 친절하게 상담해 드립니다.</p>
             </div>
           </div>
@@ -218,9 +218,9 @@ export default function Home() {
 
             {/* 협회 소개 */}
             <div className="mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <h3 className="font-bold text-gray-800 mb-2">DDGolf 협회</h3>
+              <h3 className="font-bold text-gray-800 mb-2">대덕구골프협회</h3>
               <p className="text-sm text-gray-600 leading-relaxed">
-                DDGolf 협회를 찾아주셔서 감사합니다. 골프 스포츠의 진흥과 보급을
+                대덕구골프협회를 찾아주셔서 감사합니다. 골프 스포츠의 진흥과 보급을
                 통하여 골프 저변확대를 위한 목적으로 하는 본 협회는 골프 발전에
                 전력하고 있으며 골프를 대내외적으로 대표하는 기관으로 활동하고 있습니다.
               </p>
@@ -252,7 +252,7 @@ export default function Home() {
                 <p className="text-sm font-medium text-gray-700">경기일정</p>
                 <p className="text-xs text-gray-400">schedule</p>
               </Link>
-              <Link to="/about" className="text-center group">
+              <a href="https://naver.me/FriLMXfa" target="_blank" rel="noopener noreferrer" className="text-center group">
                 <div className="bg-gray-100 rounded-lg p-4 mb-2 group-hover:bg-green-50 transition-colors">
                   <img
                     src="https://cdn-icons-png.flaticon.com/128/854/854878.png"
@@ -262,7 +262,7 @@ export default function Home() {
                 </div>
                 <p className="text-sm font-medium text-gray-700">오시는길</p>
                 <p className="text-xs text-gray-400">map</p>
-              </Link>
+              </a>
             </div>
 
             {/* 다가오는 일정 */}

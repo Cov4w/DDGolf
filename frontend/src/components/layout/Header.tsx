@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { messengerService } from '../../services/messenger';
+import api from '../../services/api';
 
 export default function Header() {
   const { user, isAuthenticated, logout } = useAuthStore();
@@ -18,6 +19,20 @@ export default function Header() {
 
   const totalUnread = (unreadData?.total_unread || 0) + (unreadData?.pending_invitations || 0);
 
+  // 관리자 알림 카운트 조회 (30초마다 자동 갱신)
+  const { data: adminNotiData } = useQuery({
+    queryKey: ['adminNotifications'],
+    queryFn: async () => {
+      const response = await api.get('/accounts/users/admin-notifications/');
+      return response.data as { pending_users: number; pending_participants: number; total: number };
+    },
+    enabled: isAuthenticated && user?.role === 'admin',
+    refetchInterval: 30000,
+    staleTime: 10000,
+  });
+
+  const adminNotiTotal = adminNotiData?.total || 0;
+
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -31,12 +46,10 @@ export default function Header() {
           <div className="flex justify-between items-center h-20">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-green-700 rounded-full flex items-center justify-center">
-                <span className="text-white text-xl">⛳</span>
-              </div>
+              <img src="/images/logo.png" alt="DDGA 로고" className="w-12 h-12 object-contain" />
               <div>
-                <h1 className="text-xl font-bold text-green-800">DDGolf 협회</h1>
-                <p className="text-xs text-green-600">DDGolf Association</p>
+                <h1 className="text-xl font-bold text-green-800">대덕구골프협회</h1>
+                <p className="text-xs text-green-600">DDGA</p>
               </div>
             </Link>
 
@@ -52,8 +65,13 @@ export default function Header() {
                   {user?.role === 'admin' && (
                     <>
                       <span className="text-gray-300">|</span>
-                      <Link to="/admin" className="text-gray-600 hover:text-green-700">
+                      <Link to="/admin" className="relative text-gray-600 hover:text-green-700">
                         관리자
+                        {adminNotiTotal > 0 && (
+                          <span className="absolute -top-2 -right-4 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                            {adminNotiTotal > 99 ? '99+' : adminNotiTotal}
+                          </span>
+                        )}
                       </Link>
                     </>
                   )}

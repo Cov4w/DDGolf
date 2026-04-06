@@ -22,7 +22,7 @@ class ChatRoomListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ChatRoom
-        fields = ['id', 'name', 'description', 'is_group', 'is_public',
+        fields = ['id', 'name', 'description', 'icon', 'is_group', 'is_public',
                   'created_by', 'member_count', 'can_manage',
                   'last_message', 'unread_count', 'notification_enabled', 'updated_at']
 
@@ -89,7 +89,7 @@ class ChatRoomDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ChatRoom
-        fields = ['id', 'name', 'description', 'is_group', 'is_public',
+        fields = ['id', 'name', 'description', 'icon', 'is_group', 'is_public',
                   'created_by', 'members', 'can_manage',
                   'messages', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']

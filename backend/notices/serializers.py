@@ -6,22 +6,30 @@ from accounts.serializers import UserSerializer
 class NoticeListSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     visibility_display = serializers.CharField(source='get_visibility_display', read_only=True)
+    club_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Notice
         fields = ['id', 'title', 'author', 'visibility', 'visibility_display',
-                  'is_important', 'is_hidden', 'views', 'created_at']
+                  'is_important', 'is_hidden', 'views', 'club', 'club_name', 'created_at']
+
+    def get_club_name(self, obj):
+        return obj.club.name if obj.club else None
 
 
 class NoticeDetailSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     visibility_display = serializers.CharField(source='get_visibility_display', read_only=True)
+    club_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Notice
         fields = ['id', 'title', 'content', 'author', 'visibility', 'visibility_display',
-                  'is_important', 'is_hidden', 'views', 'created_at', 'updated_at']
+                  'is_important', 'is_hidden', 'views', 'club', 'club_name', 'created_at', 'updated_at']
         read_only_fields = ['id', 'author', 'views', 'created_at', 'updated_at']
+
+    def get_club_name(self, obj):
+        return obj.club.name if obj.club else None
 
 
 class NoticeCreateSerializer(serializers.ModelSerializer):
@@ -34,12 +42,16 @@ class NoticeAdminSerializer(serializers.ModelSerializer):
     """관리자용 공지사항 시리얼라이저"""
     author = UserSerializer(read_only=True)
     visibility_display = serializers.CharField(source='get_visibility_display', read_only=True)
+    club_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Notice
         fields = ['id', 'title', 'content', 'author', 'visibility', 'visibility_display',
-                  'is_important', 'is_hidden', 'views', 'created_at', 'updated_at']
+                  'is_important', 'is_hidden', 'views', 'club', 'club_name', 'created_at', 'updated_at']
         read_only_fields = ['id', 'author', 'views', 'created_at', 'updated_at']
+
+    def get_club_name(self, obj):
+        return obj.club.name if obj.club else None
 
 
 class BannerSerializer(serializers.ModelSerializer):

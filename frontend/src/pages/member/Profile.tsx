@@ -145,7 +145,7 @@ export default function Profile() {
                 {user.is_approved ? '승인됨' : '승인 대기'}
               </span>
               <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-                {user.role === 'admin' ? '관리자' : user.role === 'instructor' ? '강사' : '회원'}
+                {user.role === 'admin' ? '관리자' : user.role === 'instructor' ? '클럽장' : '회원'}
               </span>
               {isSocialUser && (
                 <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700">

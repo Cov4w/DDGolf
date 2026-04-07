@@ -1,4 +1,5 @@
-from rest_framework import viewsets, permissions, status
+from django.db.models import F, Q
+from rest_framework import serializers, viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,6 +20,28 @@ class IsAdminOrReadOnly(permissions.BasePermission):
         return request.user and request.user.is_staff
 
 
+class IsAdminOrInstructorOrReadOnly(permissions.BasePermission):
+    """관리자 또는 승인된 클럽장은 쓰기 가능, 나머지는 읽기만"""
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        return request.user.role == 'instructor' and request.user.is_approved
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.user.is_staff:
+            return True
+        # 클럽장은 본인이 작성한 공지만 수정/삭제 가능
+        if request.user.role == 'instructor' and request.user.is_approved:
+            return obj.author == request.user
+        return False
+
+
 class PublicNoticeViewSet(viewsets.ReadOnlyModelViewSet):
     """공개 공지사항 ViewSet (로그인 불필요)"""
     permission_classes = [permissions.AllowAny]
@@ -36,22 +59,29 @@ class PublicNoticeViewSet(viewsets.ReadOnlyModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        instance.views += 1
-        instance.save()
+        Notice.objects.filter(pk=instance.pk).update(views=F('views') + 1)
+        instance.refresh_from_db()
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
 
 class NoticeViewSet(viewsets.ModelViewSet):
     """회원 공지사항 ViewSet (로그인 필요)"""
-    permission_classes = [permissions.IsAuthenticated, IsAdminOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsAdminOrInstructorOrReadOnly]
 
     def get_queryset(self):
+        user = self.request.user
         queryset = Notice.objects.all()
-        # 관리자가 아니면 숨김 처리된 공지사항 제외
-        if not self.request.user.is_staff:
-            queryset = queryset.filter(is_hidden=False)
-        return queryset
+
+        if user.is_staff:
+            # 관리자: 전부 표시
+            return queryset
+
+        # 일반 회원/클럽장: 전체 공지(club=null) + 본인 클럽 공지, 숨김 제외
+        q = Q(club__isnull=True)
+        if user.assigned_club_id:
+            q |= Q(club=user.assigned_club)
+        return queryset.filter(q, is_hidden=False)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -63,12 +93,23 @@ class NoticeViewSet(viewsets.ModelViewSet):
         return NoticeDetailSerializer
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        user = self.request.user
+        if user.is_staff:
+            serializer.save(author=user)
+        else:
+            # 클럽장 → 자동으로 본인 클럽, visibility=club 설정
+            if not user.assigned_club:
+                raise serializers.ValidationError('배정된 클럽이 없어 공지를 작성할 수 없습니다.')
+            serializer.save(
+                author=user,
+                club=user.assigned_club,
+                visibility='club',
+            )
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        instance.views += 1
-        instance.save()
+        Notice.objects.filter(pk=instance.pk).update(views=F('views') + 1)
+        instance.refresh_from_db()
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
@@ -83,10 +124,20 @@ class NoticeViewSet(viewsets.ModelViewSet):
             'is_hidden': notice.is_hidden
         })
 
-    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAdminUser])
+    @action(detail=False, methods=['get'])
     def admin_list(self, request):
-        """관리자용 전체 공지사항 목록 (숨김 포함)"""
-        queryset = Notice.objects.all()
+        """관리자/클럽장용 전체 공지사항 목록 (숨김 포함)"""
+        user = request.user
+        if user.is_staff:
+            queryset = Notice.objects.all()
+        elif user.role == 'instructor' and user.is_approved:
+            # 클럽장: 본인 클럽 공지만
+            queryset = Notice.objects.filter(club=user.assigned_club)
+        else:
+            return Response(
+                {'detail': '권한이 없습니다.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         serializer = NoticeListSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -183,12 +234,12 @@ class AboutContentView(APIView):
 
     def get(self, request):
         about = AboutContent.load()
-        serializer = AboutContentSerializer(about)
+        serializer = AboutContentSerializer(about, context={'request': request})
         return Response(serializer.data)
 
     def put(self, request):
         about = AboutContent.load()
-        serializer = AboutContentSerializer(about, data=request.data, partial=True)
+        serializer = AboutContentSerializer(about, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)

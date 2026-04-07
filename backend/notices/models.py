@@ -8,6 +8,7 @@ class Notice(models.Model):
     class Visibility(models.TextChoices):
         PUBLIC = 'public', '공용 (비로그인 가능)'
         MEMBER = 'member', '회원 전용'
+        CLUB = 'club', '클럽 전용'
 
     title = models.CharField('제목', max_length=200)
     content = models.TextField('내용')
@@ -16,6 +17,14 @@ class Notice(models.Model):
         on_delete=models.CASCADE,
         related_name='notices',
         verbose_name='작성자'
+    )
+    club = models.ForeignKey(
+        'messenger.ChatRoom',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='club_notices',
+        verbose_name='클럽',
     )
     visibility = models.CharField(
         '노출 범위',

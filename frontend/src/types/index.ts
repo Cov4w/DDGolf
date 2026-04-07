@@ -98,11 +98,13 @@ export interface Notice {
   title: string;
   content: string;
   author: User;
-  visibility: 'public' | 'member';
+  visibility: 'public' | 'member' | 'club';
   visibility_display?: string;
   is_important: boolean;
   is_hidden: boolean;
   views: number;
+  club?: number | null;
+  club_name?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -298,7 +298,8 @@ class UserApproveView(APIView):
                 try:
                     club = ChatRoom.objects.get(pk=assigned_club_id)
                     user.assigned_club = club
-                    # 클럽 멤버십 자동 생성
+                    # 클럽 멤버 추가 및 멤버십 자동 생성
+                    club.members.add(user)
                     ChatRoomMembership.objects.get_or_create(room=club, user=user)
                 except ChatRoom.DoesNotExist:
                     pass

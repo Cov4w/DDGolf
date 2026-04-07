@@ -116,7 +116,7 @@ export const noticesService = {
   },
 
   // 공개 클럽 목록 API
-  getPublicClubs: async (): Promise<{ id: number; name: string; icon: string | null }[]> => {
+  getPublicClubs: async (): Promise<{ id: number; name: string; icon: string | null; description: string; member_count: number }[]> => {
     const response = await api.get('/messenger/public/clubs/');
     return response.data;
   },

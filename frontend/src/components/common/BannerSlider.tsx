@@ -40,29 +40,35 @@ export default function BannerSlider() {
     setCurrentIndex((prev) => (prev + 1) % activeBanners.length);
   };
 
-  const currentBanner = activeBanners[currentIndex];
-
   return (
     <section className="max-w-7xl mx-auto px-4 py-6">
       <div className="relative bg-white rounded-lg shadow-md overflow-hidden">
-        {/* 배너 콘텐츠 */}
+        {/* 배너 콘텐츠 - 크로스페이드 */}
         <div className="relative h-48 md:h-64">
-          <img
-            src={currentBanner.image}
-            alt={currentBanner.description}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          {activeBanners.map((banner, index) => (
+            <div
+              key={banner.id}
+              className="absolute inset-0 transition-opacity duration-700 ease-in-out"
+              style={{ opacity: index === currentIndex ? 1 : 0 }}
+            >
+              <img
+                src={banner.image}
+                alt={banner.description}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
 
-          {/* 배너 정보 */}
-          <div className="absolute bottom-12 left-4 right-4 text-white">
-            <p className="text-lg md:text-xl font-semibold mb-1">
-              {currentBanner.description}
-            </p>
-            <p className="text-sm md:text-base opacity-90">
-              문의: {currentBanner.phone_number}
-            </p>
-          </div>
+              {/* 배너 정보 */}
+              <div className="absolute bottom-12 left-4 right-4 text-white">
+                <p className="text-lg md:text-xl font-semibold mb-1">
+                  {banner.description}
+                </p>
+                <p className="text-sm md:text-base opacity-90">
+                  문의: {banner.phone_number}
+                </p>
+              </div>
+            </div>
+          ))}
 
           {/* 좌우 화살표 - 항상 표시 */}
           <button

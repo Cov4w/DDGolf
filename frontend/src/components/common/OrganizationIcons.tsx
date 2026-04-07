@@ -12,17 +12,33 @@ export default function OrganizationIcons() {
 
   if (activeOrganizations.length === 0) return null;
 
+  // 아이템당 약 4초, 최소 12초
+  const duration = Math.max(activeOrganizations.length * 4, 12);
+
   return (
     <div className="border-b border-gray-200 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex flex-wrap justify-center items-center gap-6 md:gap-10">
-          {activeOrganizations.map((org) => (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 overflow-hidden">
+        <style>{`
+          @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+          .marquee-track {
+            display: flex;
+            animation: marquee ${duration}s linear infinite;
+          }
+          .marquee-track:hover {
+            animation-play-state: paused;
+          }
+        `}</style>
+        <div className="marquee-track" style={{ width: 'max-content' }}>
+          {[...activeOrganizations, ...activeOrganizations].map((org, idx) => (
             <a
-              key={org.id}
+              key={`${org.id}-${idx}`}
               href={org.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="group flex flex-col items-center"
+              className="group flex flex-col items-center flex-shrink-0 mx-5 md:mx-8"
               title={org.name}
             >
               <div className="rounded-lg bg-gray-50 border border-gray-200 overflow-hidden group-hover:border-green-300 group-hover:shadow-md transition-all" style={{ width: '160px', height: '56px' }}>

@@ -28,7 +28,7 @@ export default function About() {
 
   const getImageUrl = (path: string | null | undefined) => {
     if (!path) return null;
-    if (path.startsWith('http')) return path;
+    if (path.startsWith('http') || path.startsWith('/media/')) return path;
     return `${API_BASE}${path}`;
   };
 
@@ -142,7 +142,7 @@ export default function About() {
                   >
                     {club.icon ? (
                       <img
-                        src={getImageUrl(club.icon) || ''}
+                        src={club.icon}
                         alt={club.name}
                         className="w-14 h-14 rounded-full object-cover mx-auto mb-3"
                       />
@@ -154,6 +154,10 @@ export default function About() {
                       </div>
                     )}
                     <h3 className="font-bold text-gray-800">{club.name}</h3>
+                    <p className="text-sm text-green-700 font-medium mt-1">{club.member_count}명</p>
+                    {club.description && (
+                      <p className="text-sm text-gray-500 mt-1">{club.description}</p>
+                    )}
                   </div>
                 ))}
               </div>

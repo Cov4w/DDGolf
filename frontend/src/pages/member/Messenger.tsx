@@ -137,6 +137,16 @@ export default function Messenger() {
     enabled: !!selectedRoom,
   });
 
+  // rooms 데이터 갱신 시 selectedRoom 동기화
+  useEffect(() => {
+    if (selectedRoom && rooms) {
+      const updated = rooms.find((r) => r.id === selectedRoom.id);
+      if (updated && updated !== selectedRoom) {
+        setSelectedRoom(updated);
+      }
+    }
+  }, [rooms]);
+
   // 채팅방 선택 시 메시지 로드 및 읽음 처리
   useEffect(() => {
     if (selectedRoom) {
@@ -265,8 +275,8 @@ export default function Messenger() {
             </div>
           )}
 
-          {/* 비공용 클럽 - 관리자는 모든 클럽, 일반 회원은 클럽 가입 희망 시만 표시 */}
-          {(user?.role === 'admin' || user?.wants_club_membership !== false) && privateRooms.length > 0 && (
+          {/* 비공용 클럽 - 서버에서 접근 가능한 클럽만 반환 */}
+          {privateRooms.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">
                 {user?.role === 'admin' ? '전체 클럽' : user?.role === 'instructor' ? '내 클럽' : '참여 중인 클럽'}
@@ -285,12 +295,6 @@ export default function Messenger() {
           {rooms?.length === 0 && (
             <p className="text-gray-500 text-sm text-center py-4">
               참여 중인 클럽이 없습니다.
-            </p>
-          )}
-
-          {user?.role !== 'admin' && user?.wants_club_membership === false && privateRooms.length > 0 && (
-            <p className="text-gray-400 text-xs text-center py-2 border-t mt-2 pt-2">
-              클럽 미가입 회원은 공용 클럽만 이용 가능합니다.
             </p>
           )}
         </div>

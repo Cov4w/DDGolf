@@ -14,15 +14,15 @@ export default function Footer() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <ul className="flex justify-center gap-6 py-4 text-sm text-gray-600">
             <li>
-              <Link to="/about" className="hover:text-green-700">개인정보취급방침</Link>
+              <Link to="/privacy" className="hover:text-green-700 font-bold">개인정보취급방침</Link>
             </li>
             <li className="text-gray-300">|</li>
             <li>
-              <Link to="/about" className="hover:text-green-700">이용약관</Link>
+              <Link to="/terms" className="hover:text-green-700">이용약관</Link>
             </li>
             <li className="text-gray-300">|</li>
             <li>
-              <Link to="/about" className="hover:text-green-700">이메일무단수집거부</Link>
+              <Link to="/email-policy" className="hover:text-green-700">이메일무단수집거부</Link>
             </li>
             <li className="text-gray-300">|</li>
             <li>

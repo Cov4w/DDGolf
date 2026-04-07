@@ -17,7 +17,7 @@ User = get_user_model()
 
 
 class IsAdminOrInstructor(permissions.BasePermission):
-    """관리자 또는 강사만 허용"""
+    """관리자 또는 클럽장만 허용"""
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
             return False
@@ -41,19 +41,16 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
             status='accepted'
         ).values_list('room_id', flat=True)
 
-        # 강사: 공용 채팅방 + 자신이 생성한 채팅방 + 초대 수락한 채팅방
-        if user.role == 'instructor':
-            return ChatRoom.objects.filter(
-                Q(is_public=True) |
-                Q(created_by=user) |
-                Q(id__in=accepted_room_ids)
-            ).distinct()
+        # 공통 조건: 공용 채팅방 + 멤버로 속한 채팅방 + 초대 수락한 채팅방 + 배정된 클럽
+        q = Q(is_public=True) | Q(members=user) | Q(id__in=accepted_room_ids)
+        if user.assigned_club_id:
+            q |= Q(pk=user.assigned_club_id)
 
-        # 일반 회원: 공용 채팅방 + 초대 수락한 채팅방
-        return ChatRoom.objects.filter(
-            Q(is_public=True) |
-            Q(id__in=accepted_room_ids)
-        ).distinct()
+        # 클럽장: 추가로 자신이 생성한 채팅방
+        if user.role == 'instructor':
+            q |= Q(created_by=user)
+
+        return ChatRoom.objects.filter(q).distinct()
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -63,24 +60,31 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         return ChatRoomDetailSerializer
 
     def get_permissions(self):
-        """채팅방 생성은 관리자/강사만 가능"""
+        """채팅방 생성은 관리자/클럽장만 가능"""
         if self.action == 'create':
             return [IsAdminOrInstructor()]
         return super().get_permissions()
 
     def perform_create(self, serializer):
         """채팅방 생성 시 생성자 설정"""
-        room = serializer.save(created_by=self.request.user)
+        user = self.request.user
+        room = serializer.save(created_by=user)
         # 생성자를 멤버로 추가
-        room.members.add(self.request.user)
+        room.members.add(user)
+        # 클럽장이 비공용 클럽 생성 시 assigned_club 자동 배정
+        if not room.is_public and user.role == 'instructor' and not user.assigned_club:
+            user.assigned_club = room
+            user.save(update_fields=['assigned_club'])
 
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
         """채팅방 메시지 조회"""
         room = self.get_object()
 
-        # 채팅방 접근 시 멤버십 자동 생성 (공용 채팅방 또는 멤버인 경우)
-        if room.is_public or room.members.filter(pk=request.user.pk).exists():
+        # 채팅방 접근 시 멤버십 자동 생성 (관리자, 공용 채팅방 또는 멤버인 경우)
+        if request.user.is_staff or room.is_public or room.members.filter(pk=request.user.pk).exists():
+            if not room.members.filter(pk=request.user.pk).exists():
+                room.members.add(request.user)
             ChatRoomMembership.objects.get_or_create(
                 room=room,
                 user=request.user,
@@ -147,7 +151,7 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def invite(self, request, pk=None):
-        """멤버 초대 (관리자/강사 전용)"""
+        """멤버 초대 (관리자/클럽장 전용)"""
         room = self.get_object()
 
         # 공용 채팅방은 초대 불가 (자동 참여)
@@ -199,7 +203,7 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def kick(self, request, pk=None):
-        """멤버 퇴출 (관리자/강사 전용)"""
+        """멤버 퇴출 (관리자/클럽장 전용)"""
         room = self.get_object()
 
         # 공용 채팅방에서는 퇴출 불가
@@ -592,8 +596,20 @@ class PublicClubListView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        clubs = ChatRoom.objects.filter(is_public=False).values('id', 'name', 'icon')
-        return Response(list(clubs))
+        clubs = ChatRoom.objects.filter(is_public=False)
+        result = []
+        for club in clubs:
+            icon_url = None
+            if club.icon:
+                icon_url = request.build_absolute_uri(club.icon.url)
+            result.append({
+                'id': club.id,
+                'name': club.name,
+                'icon': icon_url,
+                'description': club.description or '',
+                'member_count': club.members.count(),
+            })
+        return Response(result)
 
 
 class ChatBanViewSet(viewsets.ModelViewSet):

@@ -27,6 +27,7 @@ import NoticeDetail from './pages/member/NoticeDetail';
 import Schedule from './pages/member/Schedule';
 import ScheduleDetail from './pages/member/ScheduleDetail';
 import Messenger from './pages/member/Messenger';
+import ClubManage from './pages/member/ClubManage';
 import Profile from './pages/member/Profile';
 
 // Admin pages
@@ -63,6 +64,8 @@ function AppContent() {
         <Route path="gallery/:id" element={<GalleryDetail />} />
         <Route path="public-notices" element={<PublicNotices />} />
         <Route path="public-notices/:id" element={<PublicNoticeDetail />} />
+        <Route path="schedule" element={<Schedule />} />
+        <Route path="schedule/:id" element={<ScheduleDetail />} />
         <Route path="privacy" element={<Privacy />} />
         <Route path="terms" element={<Terms />} />
         <Route path="email-policy" element={<EmailPolicy />} />
@@ -117,26 +120,18 @@ function AppContent() {
           }
         />
         <Route
-          path="schedule"
-          element={
-            <ProtectedRoute>
-              <Schedule />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="schedule/:id"
-          element={
-            <ProtectedRoute>
-              <ScheduleDetail />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="messenger"
           element={
             <ProtectedRoute>
               <Messenger />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="club-manage"
+          element={
+            <ProtectedRoute>
+              <ClubManage />
             </ProtectedRoute>
           }
         />

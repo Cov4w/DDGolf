@@ -6,7 +6,8 @@ from django.http import HttpResponse
 
 from .models import Event, EventParticipant
 from .serializers import (
-    EventListSerializer, EventDetailSerializer, EventCreateSerializer
+    EventListSerializer, EventDetailSerializer, EventCreateSerializer,
+    EventParticipantSerializer
 )
 
 
@@ -160,3 +161,23 @@ class EventViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         wb.save(response)
         return response
+
+
+class PublicEventViewSet(viewsets.ReadOnlyModelViewSet):
+    """공개 일정 ViewSet (비로그인 접근 가능)"""
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        queryset = Event.objects.filter(visibility='public')
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            queryset = queryset.filter(start_date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(end_date__lte=end_date)
+        return queryset
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return EventListSerializer
+        return EventDetailSerializer

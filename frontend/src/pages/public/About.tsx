@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { noticesService } from '../../services/notices';
+import ClubImageModal from '../../components/common/ClubImageModal';
+import type { PublicClubItem } from '../../types';
 
 type Section = 'greeting' | 'clubs' | 'executives';
 
@@ -8,6 +10,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export default function About() {
   const [activeSection, setActiveSection] = useState<Section>('greeting');
+  const [selectedClub, setSelectedClub] = useState<PublicClubItem | null>(null);
 
   const { data: aboutContent } = useQuery({
     queryKey: ['aboutContent'],
@@ -138,7 +141,8 @@ export default function About() {
                 {clubs.map((club) => (
                   <div
                     key={club.id}
-                    className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200 hover:shadow-md transition-shadow"
+                    onClick={() => setSelectedClub(club)}
+                    className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200 hover:shadow-md transition-shadow cursor-pointer"
                   >
                     {club.icon ? (
                       <img
@@ -157,6 +161,9 @@ export default function About() {
                     <p className="text-sm text-green-700 font-medium mt-1">{club.member_count}명</p>
                     {club.description && (
                       <p className="text-sm text-gray-500 mt-1">{club.description}</p>
+                    )}
+                    {club.images && club.images.length > 0 && (
+                      <p className="text-xs text-gray-400 mt-2">사진 {club.images.length}장</p>
                     )}
                   </div>
                 ))}
@@ -211,6 +218,15 @@ export default function About() {
           </section>
         )}
       </div>
+
+      {/* 클럽 이미지 모달 */}
+      {selectedClub && (
+        <ClubImageModal
+          images={selectedClub.images || []}
+          clubName={selectedClub.name}
+          onClose={() => setSelectedClub(null)}
+        />
+      )}
     </div>
   );
 }

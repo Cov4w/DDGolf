@@ -1,12 +1,19 @@
-import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { authService } from '../../services/auth';
+import { messengerService } from '../../services/messenger';
 
 type EditMode = 'none' | 'verify' | 'edit' | 'password';
 
 export default function Profile() {
-  const { user, setUser } = useAuthStore();
+  const { user, setUser, fetchProfile } = useAuthStore();
+  const queryClient = useQueryClient();
+
+  // 페이지 진입 시 최신 프로필 갱신 (assigned_club 반영)
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   const [editMode, setEditMode] = useState<EditMode>('none');
   const [verifyPassword, setVerifyPassword] = useState('');
@@ -71,6 +78,35 @@ export default function Profile() {
     onError: (err: unknown) => {
       const error = err as { response?: { data?: { error?: string } } };
       setMessage({ type: 'error', text: error.response?.data?.error || '비밀번호 변경에 실패했습니다.' });
+    },
+  });
+
+  // 클럽 관련
+  const { data: clubList } = useQuery({
+    queryKey: ['clubList'],
+    queryFn: () => messengerService.getClubList(),
+    enabled: !!user?.is_approved,
+  });
+
+  const joinClubMutation = useMutation({
+    mutationFn: (roomId: number) => messengerService.requestJoinClub(roomId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clubList'] });
+    },
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: { error?: string } } };
+      alert(error.response?.data?.error || '가입 요청에 실패했습니다.');
+    },
+  });
+
+  const leaveClubMutation = useMutation({
+    mutationFn: (roomId: number) => messengerService.requestLeaveClub(roomId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clubList'] });
+    },
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: { error?: string } } };
+      alert(error.response?.data?.error || '탈퇴 요청에 실패했습니다.');
     },
   });
 
@@ -351,6 +387,77 @@ export default function Profile() {
           </div>
         )}
       </div>
+
+      {/* 클럽 섹션 */}
+      {user.is_approved && (
+        <div className="card mt-6">
+          <h2 className="text-lg font-semibold mb-4">클럽</h2>
+
+          {/* 현재 소속 클럽 */}
+          {user.assigned_club_name ? (
+            <div className="mb-4 p-3 bg-green-50 rounded-lg">
+              <div className="text-sm text-gray-500">현재 소속 클럽</div>
+              <div className="font-medium text-green-800">{user.assigned_club_name}</div>
+            </div>
+          ) : (
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <div className="text-sm text-gray-500">소속 클럽이 없습니다.</div>
+            </div>
+          )}
+
+          {/* 전체 클럽 목록 */}
+          <h3 className="text-sm font-medium text-gray-700 mb-2">전체 클럽 목록</h3>
+          {clubList && clubList.length > 0 ? (
+            <div className="space-y-2">
+              {clubList.map((club) => (
+                <div key={club.id} className="flex justify-between items-center p-3 border border-gray-200 rounded-lg">
+                  <div>
+                    <div className="font-medium">{club.name}</div>
+                    <div className="text-sm text-gray-500">{club.member_count}명</div>
+                  </div>
+                  <div>
+                    {club.pending_request ? (
+                      <span className={`text-xs px-3 py-1.5 rounded-lg ${
+                        club.pending_request.request_type === 'join'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-orange-100 text-orange-700'
+                      }`}>
+                        {club.pending_request.request_type === 'join' ? '가입 요청 중' : '탈퇴 요청 중'}
+                      </span>
+                    ) : club.is_member ? (
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`${club.name} 클럽 탈퇴를 요청하시겠습니까?`)) {
+                            leaveClubMutation.mutate(club.id);
+                          }
+                        }}
+                        disabled={leaveClubMutation.isPending}
+                        className="px-3 py-1.5 text-sm border border-orange-300 text-orange-600 rounded-lg hover:bg-orange-50 disabled:opacity-50"
+                      >
+                        탈퇴 요청
+                      </button>
+                    ) : user.assigned_club ? (
+                      <span className="text-xs text-gray-400">
+                        기존 클럽 탈퇴 후 가입 가능
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => joinClubMutation.mutate(club.id)}
+                        disabled={joinClubMutation.isPending}
+                        className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                      >
+                        가입 요청
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500">등록된 클럽이 없습니다.</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

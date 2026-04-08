@@ -122,7 +122,10 @@ export interface Event {
   max_participants: number;
   participants: EventParticipant[];
   participant_count?: number;
+  pending_participant_count?: number;
   is_participating?: boolean;
+  visibility: 'public' | 'member';
+  visibility_display?: string;
   created_by: User;
   created_at: string;
   updated_at: string;
@@ -167,6 +170,54 @@ export interface Message {
   created_at: string;
 }
 
+// 클럽 가입/탈퇴 요청
+export interface ClubMembershipRequest {
+  id: number;
+  room: number;
+  room_name: string;
+  user: User;
+  request_type: 'join' | 'leave';
+  request_type_display: string;
+  status: 'pending' | 'approved' | 'rejected';
+  status_display: string;
+  created_at: string;
+  responded_at: string | null;
+  responded_by_name: string | null;
+}
+
+// 클럽 이미지
+export interface ClubImage {
+  id: number;
+  image: string;
+  caption: string;
+  order: number;
+  created_at: string;
+}
+
+// 공개 클럽 목록 아이템 (협회소개용)
+export interface PublicClubItem {
+  id: number;
+  name: string;
+  icon: string | null;
+  description: string;
+  member_count: number;
+  images: { id: number; image: string; caption: string }[];
+}
+
+// 클럽 목록 아이템 (가입/탈퇴용)
+export interface ClubListItem {
+  id: number;
+  name: string;
+  description: string;
+  icon: string | null;
+  member_count: number;
+  is_member: boolean;
+  pending_request: {
+    id: number;
+    request_type: 'join' | 'leave';
+  } | null;
+}
+
 // API 응답
 export interface PaginatedResponse<T> {
   count: number;
@@ -200,6 +251,7 @@ export interface Banner {
   image: string;
   phone_number: string;
   description: string;
+  link: string;
   order: number;
   is_active: boolean;
   created_at: string;

@@ -12,6 +12,10 @@ class Event(models.Model):
         MEETING = 'meeting', '모임'
         OTHER = 'other', '기타'
 
+    class Visibility(models.TextChoices):
+        PUBLIC = 'public', '공용'
+        MEMBER = 'member', '회원 전용'
+
     title = models.CharField('제목', max_length=200)
     description = models.TextField('설명', blank=True)
     event_type = models.CharField(
@@ -30,6 +34,12 @@ class Event(models.Model):
         on_delete=models.CASCADE,
         related_name='created_events',
         verbose_name='작성자'
+    )
+    visibility = models.CharField(
+        '노출 범위',
+        max_length=10,
+        choices=Visibility.choices,
+        default=Visibility.MEMBER
     )
     created_at = models.DateTimeField('작성일', auto_now_add=True)
     updated_at = models.DateTimeField('수정일', auto_now=True)

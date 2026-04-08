@@ -1,5 +1,5 @@
 import api from './api';
-import type { Notice, PaginatedResponse, Banner, Organization, AboutContent, Executive } from '../types';
+import type { Notice, PaginatedResponse, Banner, Organization, AboutContent, Executive, PublicClubItem } from '../types';
 
 export const noticesService = {
   // 회원용 공지사항 (로그인 필요)
@@ -116,7 +116,7 @@ export const noticesService = {
   },
 
   // 공개 클럽 목록 API
-  getPublicClubs: async (): Promise<{ id: number; name: string; icon: string | null; description: string; member_count: number }[]> => {
+  getPublicClubs: async (): Promise<PublicClubItem[]> => {
     const response = await api.get('/messenger/public/clubs/');
     return response.data;
   },

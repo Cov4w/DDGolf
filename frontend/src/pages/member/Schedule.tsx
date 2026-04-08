@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { scheduleService } from '../../services/schedule';
+import { useAuthStore } from '../../store/authStore';
 import Loading from '../../components/common/Loading';
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
@@ -22,10 +23,15 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
 
 export default function Schedule() {
   const [page, setPage] = useState(1);
+  const { isAuthenticated, user } = useAuthStore();
+  const isApproved = isAuthenticated && user?.is_approved;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['events', page],
-    queryFn: () => scheduleService.getEvents(page),
+    queryKey: ['events', page, isApproved ? 'member' : 'public'],
+    queryFn: () =>
+      isApproved
+        ? scheduleService.getEvents(page)
+        : scheduleService.getPublicEvents(page),
   });
 
   if (isLoading) return <Loading />;
@@ -33,6 +39,22 @@ export default function Schedule() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <h1 className="text-3xl font-bold text-gray-900 mb-8">경기 일정</h1>
+
+      {!isApproved && (
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
+          <svg className="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-sm text-blue-700">
+            {isAuthenticated
+              ? '회원 승인 후 더 많은 일정을 확인하고 참가 신청할 수 있습니다.'
+              : <>
+                  <Link to="/login" className="font-semibold underline hover:text-blue-900">로그인</Link>하면 더 많은 일정을 확인하고 참가 신청할 수 있습니다.
+                </>
+            }
+          </p>
+        </div>
+      )}
 
       {data && data.results.length > 0 ? (
         <>

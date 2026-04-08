@@ -37,7 +37,7 @@ class ChatRoom(models.Model):
         """채팅방 관리 권한 확인 (초대/퇴출)"""
         if user.is_staff or user.role == 'admin':
             return True
-        if self.created_by == user and user.role == 'instructor':
+        if user.role == 'instructor' and (self.created_by == user or user.assigned_club_id == self.pk):
             return True
         return False
 
@@ -186,3 +186,80 @@ class ChatBan(models.Model):
 
     def __str__(self):
         return f'{self.user.username} - {self.get_ban_type_display()}'
+
+
+class ClubMembershipRequest(models.Model):
+    """클럽 가입/탈퇴 요청"""
+
+    class RequestType(models.TextChoices):
+        JOIN = 'join', '가입'
+        LEAVE = 'leave', '탈퇴'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', '대기 중'
+        APPROVED = 'approved', '승인됨'
+        REJECTED = 'rejected', '거절됨'
+
+    room = models.ForeignKey(
+        ChatRoom,
+        on_delete=models.CASCADE,
+        related_name='membership_requests',
+        verbose_name='클럽'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='club_membership_requests',
+        verbose_name='요청자'
+    )
+    request_type = models.CharField(
+        '요청 유형',
+        max_length=10,
+        choices=RequestType.choices
+    )
+    status = models.CharField(
+        '상태',
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING
+    )
+    created_at = models.DateTimeField('요청일', auto_now_add=True)
+    responded_at = models.DateTimeField('응답일', null=True, blank=True)
+    responded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='responded_club_requests',
+        verbose_name='응답자'
+    )
+
+    class Meta:
+        verbose_name = '클럽 가입/탈퇴 요청'
+        verbose_name_plural = '클럽 가입/탈퇴 요청 목록'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.username} - {self.room.name} ({self.get_request_type_display()} / {self.get_status_display()})'
+
+
+class ClubImage(models.Model):
+    """클럽 이미지"""
+    room = models.ForeignKey(
+        ChatRoom,
+        on_delete=models.CASCADE,
+        related_name='club_images',
+        verbose_name='클럽'
+    )
+    image = models.ImageField('이미지', upload_to='club_images/')
+    caption = models.CharField('설명', max_length=200, blank=True)
+    order = models.PositiveIntegerField('순서', default=0)
+    created_at = models.DateTimeField('생성일', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '클럽 이미지'
+        verbose_name_plural = '클럽 이미지 목록'
+        ordering = ['order', '-created_at']
+
+    def __str__(self):
+        return f'{self.room.name} - 이미지 #{self.pk}'

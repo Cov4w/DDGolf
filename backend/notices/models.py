@@ -52,6 +52,7 @@ class Banner(models.Model):
     image = models.ImageField('배너 이미지', upload_to='banners/')
     phone_number = models.CharField('전화번호', max_length=20)
     description = models.CharField('간단 문구', max_length=100)
+    link = models.URLField('링크', max_length=500, blank=True, default='')
     order = models.PositiveIntegerField('순서', default=0)
     is_active = models.BooleanField('활성화', default=True)
     created_at = models.DateTimeField('생성일', auto_now_add=True)

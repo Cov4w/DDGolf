@@ -1,5 +1,5 @@
 import api from './api';
-import type { ChatRoom, Message, User } from '../types';
+import type { ChatRoom, Message, User, ClubMembershipRequest, ClubListItem, ClubImage } from '../types';
 
 const WS_BASE_URL = import.meta.env.VITE_WS_URL || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
 
@@ -115,6 +115,117 @@ export const messengerService = {
     expires_at?: string;
   }> => {
     const response = await api.get(`/messenger/rooms/${roomId}/my_ban_status/`);
+    return response.data;
+  },
+
+  // 클럽 목록 (가입/탈퇴용)
+  getClubList: async (): Promise<ClubListItem[]> => {
+    const response = await api.get('/messenger/rooms/club_list/');
+    return response.data;
+  },
+
+  // 클럽 가입 요청
+  requestJoinClub: async (roomId: number): Promise<ClubMembershipRequest> => {
+    const response = await api.post('/messenger/club-requests/request-join/', { room_id: roomId });
+    return response.data;
+  },
+
+  // 클럽 탈퇴 요청
+  requestLeaveClub: async (roomId: number): Promise<ClubMembershipRequest> => {
+    const response = await api.post('/messenger/club-requests/request-leave/', { room_id: roomId });
+    return response.data;
+  },
+
+  // 내 요청 이력
+  getMyClubRequests: async (): Promise<ClubMembershipRequest[]> => {
+    const response = await api.get('/messenger/club-requests/my-requests/');
+    return response.data;
+  },
+
+  // 클럽장: 대기 요청 목록
+  getPendingClubRequests: async (): Promise<ClubMembershipRequest[]> => {
+    const response = await api.get('/messenger/club-requests/pending-requests/');
+    return response.data;
+  },
+
+  // 클럽장: 대기 요청 수
+  getPendingClubRequestCount: async (): Promise<{ count: number }> => {
+    const response = await api.get('/messenger/club-requests/pending-count/');
+    return response.data;
+  },
+
+  // 클럽장: 요청 승인
+  approveClubRequest: async (requestId: number): Promise<void> => {
+    await api.post(`/messenger/club-requests/${requestId}/approve/`);
+  },
+
+  // 클럽장: 요청 거절
+  rejectClubRequest: async (requestId: number): Promise<void> => {
+    await api.post(`/messenger/club-requests/${requestId}/reject/`);
+  },
+
+  // 클럽장: 내 클럽 멤버 목록
+  getClubMembers: async (): Promise<User[]> => {
+    const response = await api.get('/messenger/club-requests/club-members/');
+    return response.data;
+  },
+
+  // 클럽장: 추가 가능한 회원 검색
+  searchAvailableMembers: async (search: string): Promise<User[]> => {
+    const response = await api.get('/messenger/club-requests/available-members/', {
+      params: { search },
+    });
+    return response.data;
+  },
+
+  // 클럽장: 멤버 직접 추가
+  addClubMember: async (userId: number): Promise<{ message: string }> => {
+    const response = await api.post('/messenger/club-requests/add-member/', { user_id: userId });
+    return response.data;
+  },
+
+  // 클럽장: 멤버 제거
+  removeClubMember: async (userId: number): Promise<{ message: string }> => {
+    const response = await api.post('/messenger/club-requests/remove-member/', { user_id: userId });
+    return response.data;
+  },
+
+  // 클럽 이미지 목록
+  getClubImages: async (roomId: number): Promise<ClubImage[]> => {
+    const response = await api.get(`/messenger/rooms/${roomId}/club_images/`);
+    return response.data;
+  },
+
+  // 클럽 이미지 추가
+  addClubImage: async (roomId: number, data: FormData): Promise<ClubImage> => {
+    const response = await api.post(`/messenger/rooms/${roomId}/add_club_image/`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  // 클럽 이미지 삭제
+  deleteClubImage: async (roomId: number, imageId: number): Promise<void> => {
+    await api.delete(`/messenger/rooms/${roomId}/club_images/${imageId}/`);
+  },
+
+  // 클럽 이미지 수정 (설명)
+  updateClubImage: async (roomId: number, imageId: number, data: { caption: string }): Promise<ClubImage> => {
+    const response = await api.patch(`/messenger/rooms/${roomId}/club_images/${imageId}/update/`, data);
+    return response.data;
+  },
+
+  // 클럽 소개글 수정
+  updateClubInfo: async (roomId: number, data: { description: string }): Promise<{ description: string }> => {
+    const response = await api.patch(`/messenger/rooms/${roomId}/update_info/`, data);
+    return response.data;
+  },
+
+  // 클럽 아이콘 설정
+  setClubIcon: async (roomId: number, data: FormData): Promise<{ icon: string | null }> => {
+    const response = await api.post(`/messenger/rooms/${roomId}/set_icon/`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data;
   },
 

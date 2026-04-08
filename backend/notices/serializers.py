@@ -59,7 +59,7 @@ class BannerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Banner
-        fields = ['id', 'image', 'phone_number', 'description', 'order', 'is_active', 'created_at']
+        fields = ['id', 'image', 'phone_number', 'description', 'link', 'order', 'is_active', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 

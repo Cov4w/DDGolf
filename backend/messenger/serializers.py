@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ChatRoom, Message, ChatBan, ChatRoomInvitation, ChatRoomMembership
+from .models import ChatRoom, Message, ChatBan, ChatRoomInvitation, ChatRoomMembership, ClubMembershipRequest, ClubImage
 from accounts.serializers import UserSerializer
 
 
@@ -185,3 +185,26 @@ class ChatRoomMembershipSerializer(serializers.ModelSerializer):
         model = ChatRoomMembership
         fields = ['id', 'room', 'user', 'notification_enabled', 'joined_at']
         read_only_fields = ['id', 'room', 'user', 'joined_at']
+
+
+class ClubImageSerializer(serializers.ModelSerializer):
+    """클럽 이미지 시리얼라이저"""
+    class Meta:
+        model = ClubImage
+        fields = ['id', 'image', 'caption', 'order', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class ClubMembershipRequestSerializer(serializers.ModelSerializer):
+    """클럽 가입/탈퇴 요청 시리얼라이저"""
+    user = UserSerializer(read_only=True)
+    room_name = serializers.CharField(source='room.name', read_only=True)
+    request_type_display = serializers.CharField(source='get_request_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    responded_by_name = serializers.CharField(source='responded_by.username', read_only=True, default=None)
+
+    class Meta:
+        model = ClubMembershipRequest
+        fields = ['id', 'room', 'room_name', 'user', 'request_type', 'request_type_display',
+                  'status', 'status_display', 'created_at', 'responded_at', 'responded_by_name']
+        read_only_fields = ['id', 'created_at', 'responded_at']

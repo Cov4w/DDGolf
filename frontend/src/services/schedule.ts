@@ -41,4 +41,15 @@ export const scheduleService = {
   leaveEvent: async (id: number): Promise<void> => {
     await api.post(`/schedule/events/${id}/leave/`);
   },
+
+  getPublicEvents: async (page = 1): Promise<PaginatedResponse<Event>> => {
+    const params = new URLSearchParams({ page: page.toString() });
+    const response = await api.get(`/schedule/public/events/?${params}`);
+    return response.data;
+  },
+
+  getPublicEvent: async (id: number): Promise<Event> => {
+    const response = await api.get(`/schedule/public/events/${id}/`);
+    return response.data;
+  },
 };

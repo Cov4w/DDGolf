@@ -5,12 +5,13 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import ChatRoom, Message, ChatBan, ChatRoomInvitation, ChatRoomMembership
+from .models import ChatRoom, Message, ChatBan, ChatRoomInvitation, ChatRoomMembership, ClubMembershipRequest, ClubImage
 from .serializers import (
     ChatRoomListSerializer, ChatRoomDetailSerializer,
     ChatRoomCreateSerializer, MessageSerializer,
     ChatBanSerializer, ChatBanCreateSerializer,
-    ChatRoomInvitationSerializer, ChatRoomMembershipSerializer
+    ChatRoomInvitationSerializer, ChatRoomMembershipSerializer,
+    ClubMembershipRequestSerializer, ClubImageSerializer
 )
 
 User = get_user_model()
@@ -60,21 +61,17 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         return ChatRoomDetailSerializer
 
     def get_permissions(self):
-        """채팅방 생성은 관리자/클럽장만 가능"""
+        """채팅방 생성은 관리자만 가능"""
         if self.action == 'create':
-            return [IsAdminOrInstructor()]
+            return [permissions.IsAdminUser()]
         return super().get_permissions()
 
     def perform_create(self, serializer):
-        """채팅방 생성 시 생성자 설정"""
+        """채팅방 생성 시 생성자 설정 (관리자 전용)"""
         user = self.request.user
         room = serializer.save(created_by=user)
         # 생성자를 멤버로 추가
         room.members.add(user)
-        # 클럽장이 비공용 클럽 생성 시 assigned_club 자동 배정
-        if not room.is_public and user.role == 'instructor' and not user.assigned_club:
-            user.assigned_club = room
-            user.save(update_fields=['assigned_club'])
 
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
@@ -430,10 +427,39 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    @action(detail=False, methods=['get'])
+    def club_list(self, request):
+        """전체 클럽 목록 (비공용) + 현재 사용자의 멤버 여부 및 대기 요청 상태"""
+        clubs = ChatRoom.objects.filter(is_public=False)
+        result = []
+        for club in clubs:
+            is_member = club.members.filter(pk=request.user.pk).exists()
+            pending_request = ClubMembershipRequest.objects.filter(
+                room=club, user=request.user, status='pending'
+            ).first()
+            icon_url = None
+            if club.icon:
+                icon_url = request.build_absolute_uri(club.icon.url)
+            result.append({
+                'id': club.id,
+                'name': club.name,
+                'description': club.description or '',
+                'icon': icon_url,
+                'member_count': club.members.count(),
+                'is_member': is_member,
+                'pending_request': {
+                    'id': pending_request.id,
+                    'request_type': pending_request.request_type,
+                } if pending_request else None,
+            })
+        return Response(result)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def set_icon(self, request, pk=None):
-        """클럽 아이콘 설정 (관리자 전용)"""
+        """클럽 아이콘 설정 (관리자/클럽장)"""
         room = self.get_object()
+        if not room.can_manage(request.user):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
         icon = request.FILES.get('icon')
         if icon:
             room.icon = icon
@@ -444,6 +470,72 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
             room.save()
             return Response({'message': '아이콘이 제거되었습니다.', 'icon': None})
         return Response({'error': '아이콘 파일이 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'])
+    def club_images(self, request, pk=None):
+        """클럽 이미지 목록"""
+        room = self.get_object()
+        images = room.club_images.all()
+        serializer = ClubImageSerializer(images, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def add_club_image(self, request, pk=None):
+        """클럽 이미지 추가 (최대 10개)"""
+        room = self.get_object()
+        if not room.can_manage(request.user):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+        if room.club_images.count() >= 10:
+            return Response({'error': '이미지는 최대 10개까지 등록할 수 있습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        image = request.FILES.get('image')
+        if not image:
+            return Response({'error': '이미지 파일이 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        caption = request.data.get('caption', '')
+        club_image = ClubImage.objects.create(room=room, image=image, caption=caption)
+        serializer = ClubImageSerializer(club_image)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path='club_images/(?P<image_pk>[^/.]+)')
+    def delete_club_image(self, request, pk=None, image_pk=None):
+        """클럽 이미지 삭제"""
+        room = self.get_object()
+        if not room.can_manage(request.user):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            image = room.club_images.get(pk=image_pk)
+            image.delete()
+            return Response({'message': '이미지가 삭제되었습니다.'})
+        except ClubImage.DoesNotExist:
+            return Response({'error': '이미지를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['patch'], url_path='club_images/(?P<image_pk>[^/.]+)/update')
+    def update_club_image(self, request, pk=None, image_pk=None):
+        """클럽 이미지 수정 (설명)"""
+        room = self.get_object()
+        if not room.can_manage(request.user):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            image = room.club_images.get(pk=image_pk)
+        except ClubImage.DoesNotExist:
+            return Response({'error': '이미지를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+        caption = request.data.get('caption')
+        if caption is not None:
+            image.caption = caption
+            image.save(update_fields=['caption'])
+        serializer = ClubImageSerializer(image)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['patch'])
+    def update_info(self, request, pk=None):
+        """클럽 소개글 수정"""
+        room = self.get_object()
+        if not room.can_manage(request.user):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+        description = request.data.get('description')
+        if description is not None:
+            room.description = description
+            room.save(update_fields=['description'])
+        return Response({'message': '클럽 정보가 수정되었습니다.', 'description': room.description})
 
 
 class ChatRoomInvitationViewSet(viewsets.ReadOnlyModelViewSet):
@@ -596,18 +688,26 @@ class PublicClubListView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        clubs = ChatRoom.objects.filter(is_public=False)
+        clubs = ChatRoom.objects.filter(is_public=False).prefetch_related('club_images')
         result = []
         for club in clubs:
             icon_url = None
             if club.icon:
                 icon_url = request.build_absolute_uri(club.icon.url)
+            images = []
+            for img in club.club_images.all():
+                images.append({
+                    'id': img.id,
+                    'image': request.build_absolute_uri(img.image.url),
+                    'caption': img.caption,
+                })
             result.append({
                 'id': club.id,
                 'name': club.name,
                 'icon': icon_url,
                 'description': club.description or '',
                 'member_count': club.members.count(),
+                'images': images,
             })
         return Response(result)
 
@@ -639,3 +739,278 @@ class ChatBanViewSet(viewsets.ModelViewSet):
         bans = ChatBan.objects.filter(user_id=user_id)
         serializer = self.get_serializer(bans, many=True)
         return Response(serializer.data)
+
+
+class ClubMembershipRequestViewSet(viewsets.GenericViewSet):
+    """클럽 가입/탈퇴 요청 ViewSet"""
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ClubMembershipRequestSerializer
+
+    def get_queryset(self):
+        return ClubMembershipRequest.objects.all()
+
+    @action(detail=False, methods=['post'], url_path='request-join')
+    def request_join(self, request):
+        """클럽 가입 요청 (1인 1클럽 제한)"""
+        room_id = request.data.get('room_id')
+        if not room_id:
+            return Response({'error': 'room_id가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            room = ChatRoom.objects.get(pk=room_id, is_public=False)
+        except ChatRoom.DoesNotExist:
+            return Response({'error': '클럽을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 이미 다른 클럽 소속이면 차단
+        if request.user.assigned_club_id:
+            return Response({'error': '이미 다른 클럽에 소속되어 있습니다. 기존 클럽을 탈퇴한 후 가입해주세요.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # 이미 해당 클럽 멤버인 경우
+        if room.members.filter(pk=request.user.pk).exists():
+            return Response({'error': '이미 해당 클럽의 멤버입니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 대기 중인 가입 요청이 있는 경우
+        if ClubMembershipRequest.objects.filter(
+            user=request.user, status='pending', request_type='join'
+        ).exists():
+            return Response({'error': '이미 대기 중인 가입 요청이 있습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        req = ClubMembershipRequest.objects.create(
+            room=room, user=request.user, request_type='join'
+        )
+        serializer = self.get_serializer(req)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='request-leave')
+    def request_leave(self, request):
+        """클럽 탈퇴 요청"""
+        room_id = request.data.get('room_id')
+        if not room_id:
+            return Response({'error': 'room_id가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            room = ChatRoom.objects.get(pk=room_id, is_public=False)
+        except ChatRoom.DoesNotExist:
+            return Response({'error': '클럽을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 멤버가 아닌 경우
+        if not room.members.filter(pk=request.user.pk).exists():
+            return Response({'error': '해당 클럽의 멤버가 아닙니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 대기 중인 탈퇴 요청이 있는 경우
+        if ClubMembershipRequest.objects.filter(
+            room=room, user=request.user, status='pending', request_type='leave'
+        ).exists():
+            return Response({'error': '이미 대기 중인 탈퇴 요청이 있습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        req = ClubMembershipRequest.objects.create(
+            room=room, user=request.user, request_type='leave'
+        )
+        serializer = self.get_serializer(req)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path='my-requests')
+    def my_requests(self, request):
+        """내 요청 이력"""
+        requests = ClubMembershipRequest.objects.filter(user=request.user)
+        serializer = self.get_serializer(requests, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='pending-requests')
+    def pending_requests(self, request):
+        """클럽장: 내 클럽 대기 요청 목록"""
+        user = request.user
+        if not user.assigned_club_id:
+            return Response([])
+        if user.role not in ('instructor', 'admin'):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        requests = ClubMembershipRequest.objects.filter(
+            room_id=user.assigned_club_id, status='pending'
+        )
+        serializer = self.get_serializer(requests, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='pending-count')
+    def pending_count(self, request):
+        """클럽장: 대기 요청 수 (뱃지용)"""
+        user = request.user
+        if user.role not in ('instructor', 'admin') or not user.assigned_club_id:
+            return Response({'count': 0})
+        count = ClubMembershipRequest.objects.filter(
+            room_id=user.assigned_club_id, status='pending'
+        ).count()
+        return Response({'count': count})
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """요청 승인"""
+        user = request.user
+        try:
+            req = ClubMembershipRequest.objects.get(pk=pk, status='pending')
+        except ClubMembershipRequest.DoesNotExist:
+            return Response({'error': '요청을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 권한 확인: 관리자이거나, 해당 클럽의 클럽장
+        if not (user.is_staff or user.role == 'admin' or
+                (user.role == 'instructor' and user.assigned_club_id == req.room_id)):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        req.status = 'approved'
+        req.responded_at = timezone.now()
+        req.responded_by = user
+        req.save()
+
+        if req.request_type == 'join':
+            # 멤버로 추가 + assigned_club 설정
+            req.room.members.add(req.user)
+            ChatRoomMembership.objects.get_or_create(room=req.room, user=req.user)
+            req.user.assigned_club = req.room
+            req.user.save(update_fields=['assigned_club'])
+        elif req.request_type == 'leave':
+            # 멤버 제거 + assigned_club 해제
+            req.room.members.remove(req.user)
+            ChatRoomMembership.objects.filter(room=req.room, user=req.user).delete()
+            if req.user.assigned_club_id == req.room_id:
+                req.user.assigned_club = None
+                req.user.save(update_fields=['assigned_club'])
+
+        return Response({'message': '요청이 승인되었습니다.'})
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """요청 거절"""
+        user = request.user
+        try:
+            req = ClubMembershipRequest.objects.get(pk=pk, status='pending')
+        except ClubMembershipRequest.DoesNotExist:
+            return Response({'error': '요청을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 권한 확인
+        if not (user.is_staff or user.role == 'admin' or
+                (user.role == 'instructor' and user.assigned_club_id == req.room_id)):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        req.status = 'rejected'
+        req.responded_at = timezone.now()
+        req.responded_by = user
+        req.save()
+
+        return Response({'message': '요청이 거절되었습니다.'})
+
+    @action(detail=False, methods=['get'], url_path='club-members')
+    def club_members(self, request):
+        """클럽장: 내 클럽 멤버 목록"""
+        user = request.user
+        if not user.assigned_club_id:
+            return Response([])
+        if user.role not in ('instructor', 'admin'):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        from accounts.serializers import UserSerializer
+        members = user.assigned_club.members.all()
+        serializer = UserSerializer(members, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='available-members')
+    def available_members(self, request):
+        """클럽장: 클럽에 추가 가능한 회원 검색"""
+        user = request.user
+        if not user.assigned_club_id:
+            return Response([])
+        if user.role not in ('instructor', 'admin'):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        search = request.query_params.get('search', '').strip()
+        if not search:
+            return Response([])
+
+        room = user.assigned_club
+        available = User.objects.filter(
+            is_approved=True
+        ).exclude(
+            pk__in=room.members.all()
+        )
+
+        available = available.filter(
+            Q(username__icontains=search) |
+            Q(email__icontains=search) |
+            Q(phone__icontains=search)
+        )[:20]
+
+        from accounts.serializers import UserSerializer
+        serializer = UserSerializer(available, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], url_path='add-member')
+    def add_member(self, request):
+        """클럽장: 멤버 직접 추가"""
+        user = request.user
+        if not user.assigned_club_id:
+            return Response({'error': '배정된 클럽이 없습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        if user.role not in ('instructor', 'admin'):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response({'error': 'user_id가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            target_user = User.objects.get(pk=user_id, is_approved=True)
+        except User.DoesNotExist:
+            return Response({'error': '사용자를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        room = user.assigned_club
+
+        if room.members.filter(pk=target_user.pk).exists():
+            return Response({'error': '이미 클럽 멤버입니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if target_user.assigned_club_id and target_user.assigned_club_id != room.pk:
+            return Response({'error': '해당 사용자는 이미 다른 클럽에 소속되어 있습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 멤버 추가
+        room.members.add(target_user)
+        ChatRoomMembership.objects.get_or_create(room=room, user=target_user)
+        target_user.assigned_club = room
+        target_user.save(update_fields=['assigned_club'])
+
+        return Response({'message': f'{target_user.username}님이 클럽에 추가되었습니다.'})
+
+    @action(detail=False, methods=['post'], url_path='remove-member')
+    def remove_member(self, request):
+        """클럽장: 멤버 제거"""
+        user = request.user
+        if not user.assigned_club_id:
+            return Response({'error': '배정된 클럽이 없습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        if user.role not in ('instructor', 'admin'):
+            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response({'error': 'user_id가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            target_user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({'error': '사용자를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        room = user.assigned_club
+
+        # 관리자/클럽장 본인은 제거 불가
+        if target_user.is_staff or target_user.role == 'admin':
+            return Response({'error': '관리자는 제거할 수 없습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        if target_user.pk == user.pk:
+            return Response({'error': '본인은 제거할 수 없습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not room.members.filter(pk=target_user.pk).exists():
+            return Response({'error': '해당 사용자는 클럽 멤버가 아닙니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 멤버 제거
+        room.members.remove(target_user)
+        ChatRoomMembership.objects.filter(room=room, user=target_user).delete()
+        if target_user.assigned_club_id == room.pk:
+            target_user.assigned_club = None
+            target_user.save(update_fields=['assigned_club'])
+
+        return Response({'message': f'{target_user.username}님이 클럽에서 제거되었습니다.'})

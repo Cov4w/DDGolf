@@ -45,30 +45,46 @@ export default function BannerSlider() {
       <div className="relative bg-white rounded-lg shadow-md overflow-hidden">
         {/* 배너 콘텐츠 - 크로스페이드 */}
         <div className="relative h-48 md:h-64">
-          {activeBanners.map((banner, index) => (
-            <div
-              key={banner.id}
-              className="absolute inset-0 transition-opacity duration-700 ease-in-out"
-              style={{ opacity: index === currentIndex ? 1 : 0 }}
-            >
-              <img
-                src={banner.image}
-                alt={banner.description}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-
-              {/* 배너 정보 */}
-              <div className="absolute bottom-12 left-4 right-4 text-white">
-                <p className="text-lg md:text-xl font-semibold mb-1">
-                  {banner.description}
-                </p>
-                <p className="text-sm md:text-base opacity-90">
-                  문의: {banner.phone_number}
-                </p>
+          {activeBanners.map((banner, index) => {
+            const content = (
+              <>
+                <img
+                  src={banner.image}
+                  alt={banner.description}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <div className="absolute bottom-12 left-4 right-4 text-white">
+                  <p className="text-lg md:text-xl font-semibold mb-1">
+                    {banner.description}
+                  </p>
+                  <p className="text-sm md:text-base opacity-90">
+                    문의: {banner.phone_number}
+                  </p>
+                </div>
+              </>
+            );
+            return banner.link ? (
+              <a
+                key={banner.id}
+                href={banner.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="absolute inset-0 transition-opacity duration-700 ease-in-out cursor-pointer"
+                style={{ opacity: index === currentIndex ? 1 : 0, pointerEvents: index === currentIndex ? 'auto' : 'none' }}
+              >
+                {content}
+              </a>
+            ) : (
+              <div
+                key={banner.id}
+                className="absolute inset-0 transition-opacity duration-700 ease-in-out"
+                style={{ opacity: index === currentIndex ? 1 : 0 }}
+              >
+                {content}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {/* 좌우 화살표 - 항상 표시 */}
           <button

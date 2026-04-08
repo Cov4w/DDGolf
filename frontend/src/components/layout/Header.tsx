@@ -33,6 +33,17 @@ export default function Header() {
 
   const adminNotiTotal = adminNotiData?.total || 0;
 
+  // 클럽장 대기 요청 수 조회
+  const { data: pendingClubData } = useQuery({
+    queryKey: ['pendingClubRequestCount'],
+    queryFn: () => messengerService.getPendingClubRequestCount(),
+    enabled: isAuthenticated && user?.role === 'instructor',
+    refetchInterval: 30000,
+    staleTime: 10000,
+  });
+
+  const pendingClubCount = pendingClubData?.count || 0;
+
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -70,6 +81,19 @@ export default function Header() {
                         {adminNotiTotal > 0 && (
                           <span className="absolute -top-2 -right-4 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                             {adminNotiTotal > 99 ? '99+' : adminNotiTotal}
+                          </span>
+                        )}
+                      </Link>
+                    </>
+                  )}
+                  {user?.role === 'instructor' && (
+                    <>
+                      <span className="text-gray-300">|</span>
+                      <Link to="/club-manage" className="relative text-gray-600 hover:text-green-700">
+                        클럽장
+                        {pendingClubCount > 0 && (
+                          <span className="absolute -top-2 -right-4 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                            {pendingClubCount > 99 ? '99+' : pendingClubCount}
                           </span>
                         )}
                       </Link>

@@ -20,13 +20,10 @@ export default function Messenger() {
   const [selectedRoom, setSelectedRoom] = useState<ChatRoom | null>(null);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showInvitationsModal, setShowInvitationsModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const canCreateRoom = user?.role === 'admin' || user?.role === 'instructor';
 
   const { data: rooms, isLoading } = useQuery({
     queryKey: ['chatRooms'],
@@ -55,15 +52,6 @@ export default function Messenger() {
       } else {
         alert('메시지 전송에 실패했습니다.');
       }
-    },
-  });
-
-  const createRoomMutation = useMutation({
-    mutationFn: (data: { name: string; description: string }) =>
-      api.post('/messenger/rooms/', data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chatRooms'] });
-      setShowCreateModal(false);
     },
   });
 
@@ -214,16 +202,6 @@ export default function Messenger() {
     setMessage('');
   };
 
-  const handleCreateRoom = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    createRoomMutation.mutate({
-      name: formData.get('name') as string,
-      description: formData.get('description') as string,
-    });
-  };
-
   if (isLoading) return <Loading />;
 
   // 공용 채팅방과 일반 채팅방 분리
@@ -242,14 +220,6 @@ export default function Messenger() {
               className="relative bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-yellow-600"
             >
               초대 {pendingInvitations.length}건
-            </button>
-          )}
-          {canCreateRoom && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
-            >
-              새 클럽 만들기
             </button>
           )}
         </div>
@@ -439,51 +409,6 @@ export default function Messenger() {
           )}
         </div>
       </div>
-
-      {/* 클럽 생성 모달 */}
-      {showCreateModal && (
-        <Modal onClose={() => setShowCreateModal(false)} title="새 클럽 만들기">
-          <form onSubmit={handleCreateRoom} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                클럽 이름
-              </label>
-              <input
-                type="text"
-                name="name"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                설명
-              </label>
-              <textarea
-                name="description"
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
-              >
-                취소
-              </button>
-              <button
-                type="submit"
-                disabled={createRoomMutation.isPending}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-              >
-                {createRoomMutation.isPending ? '생성 중...' : '생성'}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
 
       {/* 멤버 목록 모달 */}
       {showMembersModal && selectedRoom && (

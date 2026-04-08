@@ -26,6 +26,10 @@ body {
   background-color: #f9fafb;
 }
 
+button, [role="button"], a, select, input[type="submit"], input[type="button"], input[type="reset"] {
+  cursor: pointer;
+}
+
 .btn {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;

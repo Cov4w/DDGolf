@@ -14,12 +14,16 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
 
 export default function ScheduleDetail() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
+  const isApproved = isAuthenticated && user?.is_approved;
   const queryClient = useQueryClient();
 
   const { data: event, isLoading } = useQuery({
-    queryKey: ['event', id],
-    queryFn: () => scheduleService.getEvent(Number(id)),
+    queryKey: ['event', id, isApproved ? 'member' : 'public'],
+    queryFn: () =>
+      isApproved
+        ? scheduleService.getEvent(Number(id))
+        : scheduleService.getPublicEvent(Number(id)),
     enabled: !!id,
   });
 
@@ -59,7 +63,7 @@ export default function ScheduleDetail() {
             </span>
             <h1 className="text-2xl font-bold text-gray-900 mt-1">{event.title}</h1>
           </div>
-          {user && !event.is_participating && !isFull && (
+          {isApproved && !event.is_participating && !isFull && (
             <button
               onClick={() => joinMutation.mutate()}
               className="btn btn-primary"
@@ -68,7 +72,7 @@ export default function ScheduleDetail() {
               참가 신청
             </button>
           )}
-          {user && event.is_participating && (
+          {isApproved && event.is_participating && (
             <button
               onClick={() => leaveMutation.mutate()}
               className="btn btn-secondary"
@@ -78,6 +82,22 @@ export default function ScheduleDetail() {
             </button>
           )}
         </div>
+
+        {!isApproved && (
+          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+            <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm text-blue-700">
+              {isAuthenticated
+                ? '회원 승인 후 참가 신청이 가능합니다.'
+                : <>
+                    <Link to="/login" className="font-semibold underline hover:text-blue-900">로그인</Link> 후 참가 신청이 가능합니다.
+                  </>
+              }
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-6 mt-6">
           <div>

@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { User, Notice, Album, ChatRoom, Message, Banner, Organization } from '../../types';
@@ -18,6 +19,8 @@ interface Event {
   max_participants: number;
   participant_count: number;
   pending_participant_count: number;
+  visibility: 'public' | 'member';
+  visibility_display?: string;
   created_by: User;
   created_at: string;
 }
@@ -176,6 +179,135 @@ interface ChatBan {
   created_at: string;
 }
 
+function ClubAssignSelect({
+  currentClubId,
+  currentClubName,
+  clubs,
+  disabled,
+  onAssign,
+}: {
+  currentClubId: number | null;
+  currentClubName: string | null;
+  clubs: ChatRoom[];
+  disabled: boolean;
+  onAssign: (clubId: number | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        btnRef.current && !btnRef.current.contains(e.target as Node) &&
+        dropRef.current && !dropRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    const handleScroll = () => {
+      if (btnRef.current) {
+        const rect = btnRef.current.getBoundingClientRect();
+        setPos({ top: rect.bottom + 4, left: rect.left });
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [open]);
+
+  const handleOpen = () => {
+    if (disabled) return;
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setOpen(!open);
+    setSearch('');
+  };
+
+  const select = (clubId: number | null) => {
+    onAssign(clubId);
+    setOpen(false);
+    setSearch('');
+  };
+
+  const filtered = clubs.filter((c) =>
+    !search || c.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={handleOpen}
+        disabled={disabled}
+        className={`text-xs border rounded px-2 py-1 w-[130px] text-left truncate inline-flex items-center gap-1 ${
+          disabled ? 'opacity-50 border-gray-200 bg-gray-50' : 'border-gray-300 hover:border-gray-400 bg-white'
+        }`}
+      >
+        <span className="truncate flex-1">{currentClubName || '미배정'}</span>
+        <svg className="w-3 h-3 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && createPortal(
+        <div
+          ref={dropRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999, width: 224 }}
+          className="bg-white border border-gray-200 rounded-lg shadow-lg"
+        >
+          <div className="p-2">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="클럽 검색..."
+              className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-green-500 focus:border-green-500"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => select(null)}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 ${
+                !currentClubId ? 'bg-green-50 text-green-700 font-medium' : 'text-gray-700'
+              }`}
+            >
+              미배정
+            </button>
+            {filtered.map((club) => (
+              <button
+                key={club.id}
+                type="button"
+                onClick={() => select(club.id)}
+                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 ${
+                  currentClubId === club.id ? 'bg-green-50 text-green-700 font-medium' : 'text-gray-700'
+                }`}
+              >
+                {club.name}
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="px-3 py-2 text-xs text-gray-400">검색 결과 없음</div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('members');
   const [memberFilter, setMemberFilter] = useState<'pending' | 'all'>('pending');
@@ -206,6 +338,7 @@ export default function AdminDashboard() {
   const [executivePhoneNumber, setExecutivePhoneNumber] = useState('');
   const [editingClubId, setEditingClubId] = useState<number | null>(null);
   const [editingClubName, setEditingClubName] = useState('');
+  const [showCreateClubForm, setShowCreateClubForm] = useState(false);
   const [bannerPhonePrefix, setBannerPhonePrefix] = useState('02');
   const [bannerPhoneNumber, setBannerPhoneNumber] = useState('');
   const queryClient = useQueryClient();
@@ -292,10 +425,13 @@ export default function AdminDashboard() {
   });
 
   // Notices Query
-  const { data: notices, isLoading: noticesLoading } = useQuery({
+  const { data: notices, isLoading: noticesLoading, error: noticesError } = useQuery({
     queryKey: ['adminNotices'],
     queryFn: async () => {
       const response = await api.get('/notices/admin_list/');
+      if (response.data.results) {
+        return response.data.results as Notice[];
+      }
       return response.data as Notice[];
     },
     enabled: activeTab === 'notices',
@@ -315,10 +451,13 @@ export default function AdminDashboard() {
   });
 
   // Gallery Query
-  const { data: albums, isLoading: albumsLoading } = useQuery({
+  const { data: albums, isLoading: albumsLoading, error: albumsError } = useQuery({
     queryKey: ['adminAlbums'],
     queryFn: async () => {
       const response = await api.get('/gallery/albums/admin_list/');
+      if (response.data.results) {
+        return response.data.results as Album[];
+      }
       return response.data as Album[];
     },
     enabled: activeTab === 'gallery',
@@ -494,6 +633,7 @@ export default function AdminDashboard() {
       start_date: string;
       end_date: string;
       max_participants: number;
+      visibility: string;
     }) => api.post('/schedule/events/', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminEvents'] });
@@ -616,6 +756,16 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminChatRooms'] });
       alert('채팅 기록이 삭제되었습니다.');
+    },
+  });
+
+  // Create Club Mutation
+  const createClubMutation = useMutation({
+    mutationFn: (data: { name: string; description: string }) =>
+      api.post('/messenger/rooms/', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminChatRooms'] });
+      setShowCreateClubForm(false);
     },
   });
 
@@ -775,6 +925,7 @@ export default function AdminDashboard() {
       : bannerPhonePrefix;
     formData.append('phone_number', fullPhone);
     formData.append('description', form.querySelector<HTMLInputElement>('[name="description"]')?.value || '');
+    formData.append('link', form.querySelector<HTMLInputElement>('[name="link"]')?.value || '');
     formData.append('is_active', form.querySelector<HTMLInputElement>('[name="is_active"]')?.checked ? 'true' : 'false');
 
     if (bannerImage.length > 0) {
@@ -864,6 +1015,7 @@ export default function AdminDashboard() {
       start_date: formData.get('start_date') as string,
       end_date: formData.get('end_date') as string,
       max_participants: Number(formData.get('max_participants')) || 0,
+      visibility: formData.get('visibility') as string,
     };
 
     if (editingEvent) {
@@ -1000,7 +1152,6 @@ export default function AdminDashboard() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">신청 역할</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">현재 역할</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">클럽 배정</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">상태</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">가입일</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">관리</th>
                     </tr>
@@ -1047,35 +1198,19 @@ export default function AdminDashboard() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           {user.is_approved && user.role !== 'admin' ? (
-                            <select
-                              value={user.assigned_club || ''}
-                              onChange={(e) => {
-                                const clubId = e.target.value ? Number(e.target.value) : null;
-                                assignClubMutation.mutate({ userId: user.id, clubId });
-                              }}
+                            <ClubAssignSelect
+                              currentClubId={user.assigned_club || null}
+                              currentClubName={user.assigned_club_name || null}
+                              clubs={allChatRooms?.filter((r) => !r.is_public) || []}
                               disabled={assignClubMutation.isPending}
-                              className="text-xs border border-gray-300 rounded px-2 py-1 max-w-[140px]"
-                            >
-                              <option value="">미배정</option>
-                              {allChatRooms?.filter((r) => !r.is_public).map((room) => (
-                                <option key={room.id} value={room.id}>{room.name}</option>
-                              ))}
-                            </select>
+                              onAssign={(clubId) => assignClubMutation.mutate({ userId: user.id, clubId })}
+                            />
                           ) : user.role === 'admin' ? (
                             <span className="text-xs text-gray-400">-</span>
                           ) : (
                             <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${user.wants_club_membership ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
                               {user.wants_club_membership ? '클럽 희망' : '-'}
                             </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {user.is_active === false ? (
-                            <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">차단됨</span>
-                          ) : user.is_approved ? (
-                            <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">승인됨</span>
-                          ) : (
-                            <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">대기중</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{new Date(user.created_at).toLocaleDateString()}</td>
@@ -1101,32 +1236,35 @@ export default function AdminDashboard() {
                                 )}
                               </>
                             )}
-                            {user.role !== 'admin' && (
-                              user.is_active === false ? (
-                                <button
-                                  onClick={() => {
-                                    if (window.confirm('차단을 해제하시겠습니까?')) {
-                                      unblockMutation.mutate(user.id);
-                                    }
-                                  }}
-                                  className="text-green-600 hover:text-green-700 text-sm font-medium cursor-pointer"
-                                  disabled={unblockMutation.isPending}
-                                >
-                                  차단 해제
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => {
+                            {user.role !== 'admin' && user.is_approved && (
+                              <select
+                                value={user.is_active === false ? 'blocked' : 'active'}
+                                onChange={(e) => {
+                                  const newVal = e.target.value;
+                                  if (newVal === 'blocked' && user.is_active !== false) {
                                     if (window.confirm('정말 차단하시겠습니까?')) {
                                       blockMutation.mutate(user.id);
+                                    } else {
+                                      e.target.value = 'active';
                                     }
-                                  }}
-                                  className="text-red-600 hover:text-red-700 text-sm font-medium cursor-pointer"
-                                  disabled={blockMutation.isPending}
-                                >
-                                  차단
-                                </button>
-                              )
+                                  } else if (newVal === 'active' && user.is_active === false) {
+                                    if (window.confirm('차단을 해제하시겠습니까?')) {
+                                      unblockMutation.mutate(user.id);
+                                    } else {
+                                      e.target.value = 'blocked';
+                                    }
+                                  }
+                                }}
+                                disabled={blockMutation.isPending || unblockMutation.isPending}
+                                className={`text-xs border rounded px-2 py-1 ${
+                                  user.is_active === false
+                                    ? 'border-red-300 text-red-700 bg-red-50'
+                                    : 'border-gray-300 text-gray-700'
+                                }`}
+                              >
+                                <option value="active">정상</option>
+                                <option value="blocked">차단</option>
+                              </select>
                             )}
                           </div>
                         </td>
@@ -1498,6 +1636,8 @@ export default function AdminDashboard() {
           <div className="divide-y divide-gray-200">
             {noticesLoading ? (
               <div className="p-8 text-center text-gray-500">로딩 중...</div>
+            ) : noticesError ? (
+              <div className="p-8 text-center text-red-500">공지사항을 불러오는 중 오류가 발생했습니다. 새로고침해 주세요.</div>
             ) : notices && notices.length > 0 ? (
               notices.map((notice) => (
                 <div key={notice.id} className={`p-4 flex justify-between items-center ${notice.is_hidden ? 'bg-gray-100' : ''}`}>
@@ -1637,6 +1777,17 @@ export default function AdminDashboard() {
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">노출 범위</label>
+                  <select
+                    name="visibility"
+                    defaultValue={editingEvent?.visibility || 'member'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                  >
+                    <option value="member">회원 전용</option>
+                    <option value="public">공용</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">시작 일시</label>
                   <input
                     type="datetime-local"
@@ -1711,6 +1862,11 @@ export default function AdminDashboard() {
                            event.event_type === 'tournament' ? '토너먼트' :
                            event.event_type === 'practice' ? '연습' :
                            event.event_type === 'meeting' ? '모임' : '기타'}
+                        </span>
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded ${
+                          event.visibility === 'public' ? 'bg-sky-100 text-sky-800' : 'bg-orange-100 text-orange-800'
+                        }`}>
+                          {event.visibility === 'public' ? '공용' : '회원전용'}
                         </span>
                         <span className="font-medium">{event.title}</span>
                       </div>
@@ -1977,6 +2133,8 @@ export default function AdminDashboard() {
           <div className="divide-y divide-gray-200">
             {albumsLoading ? (
               <div className="p-8 text-center text-gray-500">로딩 중...</div>
+            ) : albumsError ? (
+              <div className="p-8 text-center text-red-500">갤러리를 불러오는 중 오류가 발생했습니다. 새로고침해 주세요.</div>
             ) : albums && albums.length > 0 ? (
               albums.map((album) => (
                 <div key={album.id} className={`p-4 flex justify-between items-center ${album.is_hidden ? 'bg-gray-100' : ''}`}>
@@ -2034,9 +2192,64 @@ export default function AdminDashboard() {
       {activeTab === 'messenger' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-lg shadow">
-            <div className="p-4 border-b border-gray-200">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
               <h2 className="text-lg font-semibold">클럽 목록</h2>
+              <button
+                onClick={() => setShowCreateClubForm(!showCreateClubForm)}
+                className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                새 클럽 만들기
+              </button>
             </div>
+            {showCreateClubForm && (
+              <div className="p-4 border-b border-gray-200 bg-gray-50">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.currentTarget);
+                    createClubMutation.mutate({
+                      name: formData.get('name') as string,
+                      description: formData.get('description') as string,
+                    });
+                  }}
+                  className="space-y-3"
+                >
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">클럽 이름</label>
+                    <input
+                      type="text"
+                      name="name"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">설명</label>
+                    <textarea
+                      name="description"
+                      rows={2}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateClubForm(false)}
+                      className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 rounded-lg"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={createClubMutation.isPending}
+                      className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {createClubMutation.isPending ? '생성 중...' : '생성'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
             <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
               {roomsLoading ? (
                 <div className="p-8 text-center text-gray-500">로딩 중...</div>
@@ -2408,6 +2621,18 @@ export default function AdminDashboard() {
                     입력 예시: {bannerPhonePrefix}-{bannerPhoneNumber || 'XXX-XXXX'}
                   </p>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">링크 (선택)</label>
+                  <input
+                    type="url"
+                    name="link"
+                    defaultValue={editingBanner?.link || ''}
+                    key={editingBanner ? `link-${editingBanner.id}` : 'link-new'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    placeholder="https://example.com"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">배너 클릭 시 이동할 링크 (비워두면 링크 없음)</p>
+                </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -2467,6 +2692,9 @@ export default function AdminDashboard() {
                       </div>
                       <div className="text-sm text-gray-500 mt-1">
                         {banner.phone_number} | 순서: {banner.order}
+                        {banner.link && (
+                          <> | <a href={banner.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">링크</a></>
+                        )}
                       </div>
                     </div>
                   </div>

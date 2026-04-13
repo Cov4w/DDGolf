@@ -97,8 +97,11 @@ export const authService = {
     return response.data;
   },
 
-  updateProfile: async (data: Partial<User>): Promise<User> => {
-    const response = await api.patch('/accounts/profile/', data);
+  updateProfile: async (data: Partial<User> | FormData): Promise<User> => {
+    const isFormData = data instanceof FormData;
+    const response = await api.patch('/accounts/profile/', data, isFormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    } : undefined);
     return response.data;
   },
 

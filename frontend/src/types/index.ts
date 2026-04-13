@@ -26,7 +26,7 @@ export interface AuthTokens {
 }
 
 export interface LoginRequest {
-  email: string;
+  email: string;  // 이메일 또는 이름
   password: string;
 }
 
@@ -216,6 +216,21 @@ export interface ClubListItem {
     id: number;
     request_type: 'join' | 'leave';
   } | null;
+}
+
+// SMS 로그
+export interface SmsLog {
+  id: number;
+  sender: number;
+  sender_name: string;
+  club: number | null;
+  club_name: string;
+  message: string;
+  msg_type: 'SMS' | 'LMS';
+  recipients_count: number;
+  recipients_info: { id: number; username: string; phone: string }[];
+  aligo_response: Record<string, unknown>;
+  created_at: string;
 }
 
 // API 응답

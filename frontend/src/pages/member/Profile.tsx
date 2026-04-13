@@ -1,14 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { authService } from '../../services/auth';
 import { messengerService } from '../../services/messenger';
 
+const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
+
 type EditMode = 'none' | 'verify' | 'edit' | 'password';
 
 export default function Profile() {
-  const { user, setUser, fetchProfile } = useAuthStore();
+  const { user, fetchProfile } = useAuthStore();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 페이지 진입 시 최신 프로필 갱신 (assigned_club 반영)
   useEffect(() => {
@@ -20,7 +23,10 @@ export default function Profile() {
   const [formData, setFormData] = useState({
     username: user?.username || '',
     phone: user?.phone || '',
+    email: user?.email || '',
   });
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
   const [passwordData, setPasswordData] = useState({
     current_password: '',
     new_password: '',
@@ -52,16 +58,24 @@ export default function Profile() {
 
   // 프로필 수정
   const updateMutation = useMutation({
-    mutationFn: (data: { username?: string; phone?: string }) =>
+    mutationFn: (data: FormData) =>
       authService.updateProfile(data),
-    onSuccess: (updatedUser) => {
-      setUser(updatedUser);
+    onSuccess: async () => {
+      await fetchProfile();
       setEditMode('none');
+      setProfileImageFile(null);
+      setProfileImagePreview(null);
       setMessage({ type: 'success', text: '프로필이 업데이트되었습니다.' });
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     },
-    onError: () => {
-      setMessage({ type: 'error', text: '프로필 수정에 실패했습니다.' });
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: Record<string, string[]> } };
+      const errorData = error.response?.data;
+      if (errorData?.email) {
+        setMessage({ type: 'error', text: errorData.email[0] });
+      } else {
+        setMessage({ type: 'error', text: '프로필 수정에 실패했습니다.' });
+      }
     },
   });
 
@@ -121,7 +135,16 @@ export default function Profile() {
 
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateMutation.mutate(formData);
+    if (!window.confirm('프로필을 수정하시겠습니까?')) return;
+
+    const fd = new FormData();
+    fd.append('username', formData.username);
+    fd.append('phone', formData.phone);
+    fd.append('email', formData.email);
+    if (profileImageFile) {
+      fd.append('profile_image', profileImageFile);
+    }
+    updateMutation.mutate(fd);
   };
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -141,8 +164,20 @@ export default function Profile() {
     setEditMode('none');
     setVerifyPassword('');
     setVerifyError('');
-    setFormData({ username: user?.username || '', phone: user?.phone || '' });
+    setFormData({ username: user?.username || '', phone: user?.phone || '', email: user?.email || '' });
+    setProfileImageFile(null);
+    setProfileImagePreview(null);
     setPasswordData({ current_password: '', new_password: '', new_password2: '' });
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setProfileImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => setProfileImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
   if (!user) return null;
@@ -164,9 +199,17 @@ export default function Profile() {
 
       <div className="card">
         <div className="flex items-center gap-6 mb-8">
-          <div className="w-24 h-24 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 text-3xl font-bold">
-            {user.username.charAt(0).toUpperCase()}
-          </div>
+          {user.profile_image ? (
+            <img
+              src={user.profile_image.startsWith('http') ? user.profile_image : `${API_BASE}${user.profile_image}`}
+              alt="프로필"
+              className="w-24 h-24 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-24 h-24 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 text-3xl font-bold">
+              {user.username.charAt(0).toUpperCase()}
+            </div>
+          )}
           <div>
             <h2 className="text-xl font-semibold">{user.username}</h2>
             <p className="text-gray-500">{user.email}</p>
@@ -236,6 +279,46 @@ export default function Profile() {
         {/* 프로필 수정 폼 */}
         {editMode === 'edit' && (
           <form onSubmit={handleProfileSubmit} className="space-y-4">
+            {/* 프로필 사진 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                프로필 사진
+              </label>
+              <div className="flex items-center gap-4">
+                {profileImagePreview ? (
+                  <img src={profileImagePreview} alt="미리보기" className="w-20 h-20 rounded-full object-cover" />
+                ) : user.profile_image ? (
+                  <img
+                    src={user.profile_image.startsWith('http') ? user.profile_image : `${API_BASE}${user.profile_image}`}
+                    alt="현재 프로필"
+                    className="w-20 h-20 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 text-2xl font-bold">
+                    {user.username.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-sm bg-gray-100 px-4 py-2 rounded-lg hover:bg-gray-200"
+                  >
+                    사진 변경
+                  </button>
+                  {profileImageFile && (
+                    <p className="text-xs text-gray-500 mt-1">{profileImageFile.name}</p>
+                  )}
+                </div>
+              </div>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 이름
@@ -244,6 +327,17 @@ export default function Profile() {
                 type="text"
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                이메일
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
               />
             </div>
@@ -370,7 +464,10 @@ export default function Profile() {
             </div>
             <div className="flex gap-2 pt-4">
               <button
-                onClick={() => setEditMode('edit')}
+                onClick={() => {
+                  setFormData({ username: user.username, phone: user.phone || '', email: user.email });
+                  setEditMode('edit');
+                }}
                 className="bg-green-700 text-white px-6 py-2 rounded-lg hover:bg-green-800"
               >
                 프로필 수정

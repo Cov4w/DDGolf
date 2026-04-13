@@ -26,6 +26,7 @@ export default function ClubManage() {
   const [memberSearch, setMemberSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
 
+
   // 페이지 진입 시 최신 프로필 갱신 (assigned_club 반영)
   useEffect(() => {
     fetchProfile();

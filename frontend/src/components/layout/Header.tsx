@@ -170,7 +170,7 @@ export default function Header() {
                     to="/boards"
                     className="block px-8 py-4 text-white font-medium hover:bg-green-900 transition-colors"
                   >
-                    게시판
+                    자유게시판
                   </Link>
                 </li>
                 <li>

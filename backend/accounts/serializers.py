@@ -112,7 +112,13 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'phone', 'profile_image']
+        fields = ['username', 'phone', 'email', 'profile_image']
+
+    def validate_email(self, value):
+        user = self.context['request'].user
+        if User.objects.filter(email=value).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError("이미 사용 중인 이메일입니다.")
+        return value
 
 
 class AdminUserSerializer(serializers.ModelSerializer):

@@ -55,7 +55,11 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // 로그인/토큰 갱신 요청은 refresh 시도하지 않음
+    const skipRefreshUrls = ['/accounts/login/', '/accounts/token/refresh/', '/accounts/google/login/'];
+    const isAuthRequest = skipRefreshUrls.some(url => originalRequest.url?.includes(url));
+
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
       originalRequest._retry = true;
 
       const refreshToken = getRefreshToken();

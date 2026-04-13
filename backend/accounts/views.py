@@ -18,20 +18,28 @@ User = get_user_model()
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    """커스텀 토큰 시리얼라이저 - 승인 여부 체크"""
+    """커스텀 토큰 시리얼라이저 - 이메일 또는 이름으로 로그인, 승인 여부 체크"""
 
     def validate(self, attrs):
-        # 먼저 이메일로 사용자 찾기
-        email = attrs.get('email')
+        # 이메일 또는 이름으로 사용자 찾기
+        email_or_name = attrs.get('email', '')
         password = attrs.get('password')
 
-        if email and password:
-            # 사용자 존재 여부 확인
-            try:
-                user = User.objects.get(email=email)
-            except User.DoesNotExist:
+        if email_or_name and password:
+            # 먼저 이메일로 검색, 없으면 이름으로 검색
+            user = User.objects.filter(email=email_or_name).first()
+            if not user:
+                users_by_name = User.objects.filter(username=email_or_name)
+                if users_by_name.count() == 1:
+                    user = users_by_name.first()
+                elif users_by_name.count() > 1:
+                    raise serializers.ValidationError({
+                        'detail': '동일한 이름의 회원이 여러 명 있습니다. 이메일로 로그인해주세요.'
+                    })
+
+            if not user:
                 raise serializers.ValidationError({
-                    'detail': '이메일 또는 비밀번호가 올바르지 않습니다.'
+                    'detail': '이메일/이름 또는 비밀번호가 올바르지 않습니다.'
                 })
 
             # 차단된 사용자 체크
@@ -45,6 +53,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 raise serializers.ValidationError({
                     'detail': '관리자 승인 대기 중입니다. 승인 후 로그인 가능합니다.'
                 })
+
+            # 이름으로 로그인한 경우, attrs의 email을 실제 이메일로 교체
+            attrs['email'] = user.email
 
         # 기본 검증 수행 (비밀번호 확인 등)
         return super().validate(attrs)
@@ -239,6 +250,15 @@ class ProfileView(generics.RetrieveUpdateAPIView):
         if self.request.method in ['PUT', 'PATCH']:
             return UserUpdateSerializer
         return UserSerializer
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        # 전체 사용자 정보를 반환
+        return Response(UserSerializer(instance).data)
 
 
 class UserListView(generics.ListAPIView):

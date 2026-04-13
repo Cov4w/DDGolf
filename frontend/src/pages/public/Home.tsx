@@ -1,14 +1,17 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { galleryService } from '../../services/gallery';
 import { noticesService } from '../../services/notices';
 import { scheduleService } from '../../services/schedule';
 import { messengerService } from '../../services/messenger';
+import { boardsService } from '../../services/boards';
 import { useAuthStore } from '../../store/authStore';
 import BannerSlider from '../../components/common/BannerSlider';
 
 export default function Home() {
   const { isAuthenticated, user } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<'notices' | 'boards'>('notices');
 
   const { data: albums } = useQuery({
     queryKey: ['publicAlbums'],
@@ -33,6 +36,12 @@ export default function Home() {
     queryKey: ['upcomingEvents'],
     queryFn: () => scheduleService.getUpcomingEvents(),
     enabled: isAuthenticated && !!user?.is_approved,
+  });
+
+  // 자유게시판 최신글 (공개)
+  const { data: boardPosts } = useQuery({
+    queryKey: ['homeBoardPosts'],
+    queryFn: () => boardsService.getPosts(1),
   });
 
   // 채팅 안읽은 메시지 수 (승인된 회원용)
@@ -87,6 +96,16 @@ export default function Home() {
                 </Link>
               </li>
             )}
+            {isAuthenticated && user?.is_approved && user.role === 'admin' && (
+              <li>
+                <Link
+                  to="/admin?tab=sms"
+                  className="text-gray-600 hover:text-green-700 block py-1"
+                >
+                  → SMS 관리
+                </Link>
+              </li>
+            )}
             {!isAuthenticated && (
               <li>
                 <Link to="/register" className="text-gray-600 hover:text-green-700 block py-1">
@@ -115,58 +134,94 @@ export default function Home() {
           <div className="lg:col-span-1">
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               <div className="flex border-b">
-                <Link
-                  to={isAuthenticated && user?.is_approved ? '/notices' : '/public-notices'}
-                  className="flex-1 bg-green-800 text-white text-center py-3 font-bold hover:bg-green-900"
+                <button
+                  onClick={() => setActiveTab('notices')}
+                  className={`flex-1 text-center py-3 font-bold transition-colors ${
+                    activeTab === 'notices'
+                      ? 'bg-green-800 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
                 >
                   공지사항
-                </Link>
-                <Link
-                  to={isAuthenticated && user?.is_approved ? '/boards' : '/login'}
-                  className="flex-1 bg-gray-100 text-gray-600 text-center py-3 font-bold hover:bg-gray-200"
+                </button>
+                <button
+                  onClick={() => setActiveTab('boards')}
+                  className={`flex-1 text-center py-3 font-bold transition-colors ${
+                    activeTab === 'boards'
+                      ? 'bg-green-800 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
                 >
                   자유게시판
-                </Link>
+                </button>
               </div>
               <div className="p-4">
-                {isAuthenticated && user?.is_approved && notices?.results ? (
-                  <ul className="space-y-2">
-                    {notices.results.slice(0, 5).map((notice) => (
-                      <li key={notice.id} className="flex justify-between items-center text-sm border-b border-dashed border-gray-200 pb-2">
-                        <Link
-                          to={`/notices/${notice.id}`}
-                          className="text-gray-700 hover:text-green-700 truncate flex-1 mr-2"
-                        >
-                          {notice.is_important && <span className="text-red-500 mr-1">•</span>}
-                          {notice.title}
-                        </Link>
-                        <span className="text-gray-400 text-xs whitespace-nowrap">
-                          {new Date(notice.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : publicNotices?.results && publicNotices.results.length > 0 ? (
-                  <ul className="space-y-2">
-                    {publicNotices.results.slice(0, 5).map((notice) => (
-                      <li key={notice.id} className="flex justify-between items-center text-sm border-b border-dashed border-gray-200 pb-2">
-                        <Link
-                          to={`/public-notices/${notice.id}`}
-                          className="text-gray-700 hover:text-green-700 truncate flex-1 mr-2"
-                        >
-                          {notice.is_important && <span className="text-red-500 mr-1">•</span>}
-                          {notice.title}
-                        </Link>
-                        <span className="text-gray-400 text-xs whitespace-nowrap">
-                          {new Date(notice.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                {activeTab === 'notices' ? (
+                  <>
+                    {isAuthenticated && user?.is_approved && notices?.results ? (
+                      <ul className="space-y-2">
+                        {notices.results.slice(0, 5).map((notice) => (
+                          <li key={notice.id} className="flex justify-between items-center text-sm border-b border-dashed border-gray-200 pb-2">
+                            <Link
+                              to={`/notices/${notice.id}`}
+                              className="text-gray-700 hover:text-green-700 truncate flex-1 mr-2"
+                            >
+                              {notice.is_important && <span className="text-red-500 mr-1">•</span>}
+                              {notice.title}
+                            </Link>
+                            <span className="text-gray-400 text-xs whitespace-nowrap">
+                              {new Date(notice.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : publicNotices?.results && publicNotices.results.length > 0 ? (
+                      <ul className="space-y-2">
+                        {publicNotices.results.slice(0, 5).map((notice) => (
+                          <li key={notice.id} className="flex justify-between items-center text-sm border-b border-dashed border-gray-200 pb-2">
+                            <Link
+                              to={`/public-notices/${notice.id}`}
+                              className="text-gray-700 hover:text-green-700 truncate flex-1 mr-2"
+                            >
+                              {notice.is_important && <span className="text-red-500 mr-1">•</span>}
+                              {notice.title}
+                            </Link>
+                            <span className="text-gray-400 text-xs whitespace-nowrap">
+                              {new Date(notice.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-gray-500 text-sm text-center py-4">
+                        등록된 공지사항이 없습니다.
+                      </p>
+                    )}
+                  </>
                 ) : (
-                  <p className="text-gray-500 text-sm text-center py-4">
-                    등록된 공지사항이 없습니다.
-                  </p>
+                  <>
+                    {boardPosts?.results && boardPosts.results.length > 0 ? (
+                      <ul className="space-y-2">
+                        {boardPosts.results.slice(0, 5).map((post) => (
+                          <li key={post.id} className="flex justify-between items-center text-sm border-b border-dashed border-gray-200 pb-2">
+                            <Link
+                              to={isAuthenticated && user?.is_approved ? `/boards/${post.id}` : '/login'}
+                              className="text-gray-700 hover:text-green-700 truncate flex-1 mr-2"
+                            >
+                              {post.title}
+                            </Link>
+                            <span className="text-gray-400 text-xs whitespace-nowrap">
+                              {new Date(post.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-gray-500 text-sm text-center py-4">
+                        등록된 게시글이 없습니다.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </div>

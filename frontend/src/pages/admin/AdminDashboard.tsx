@@ -1,10 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { User, Notice, Album, ChatRoom, Message, Banner, Organization } from '../../types';
+import type { User, Notice, Album, ChatRoom, Message, Banner, Organization, SmsLog } from '../../types';
 import Loading from '../../components/common/Loading';
 import { noticesService } from '../../services/notices';
+import { smsService } from '../../services/sms';
 
 // Event 타입 정의
 interface Event {
@@ -164,7 +166,7 @@ function FileDropZone({
   );
 }
 
-type TabType = 'members' | 'about' | 'notices' | 'schedule' | 'gallery' | 'messenger' | 'banners' | 'organizations';
+type TabType = 'members' | 'about' | 'notices' | 'schedule' | 'gallery' | 'messenger' | 'banners' | 'organizations' | 'sms';
 
 interface ChatBan {
   id: number;
@@ -309,7 +311,9 @@ function ClubAssignSelect({
 }
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<TabType>('members');
+  const [searchParams] = useSearchParams();
+  const initialTab = (searchParams.get('tab') as TabType) || 'members';
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [memberFilter, setMemberFilter] = useState<'pending' | 'all'>('pending');
   const [showNoticeForm, setShowNoticeForm] = useState(false);
   const [editingNotice, setEditingNotice] = useState<Notice | null>(null);
@@ -341,6 +345,12 @@ export default function AdminDashboard() {
   const [showCreateClubForm, setShowCreateClubForm] = useState(false);
   const [bannerPhonePrefix, setBannerPhonePrefix] = useState('02');
   const [bannerPhoneNumber, setBannerPhoneNumber] = useState('');
+  // SMS state
+  const [smsMessage, setSmsMessage] = useState('');
+  const [smsClubFilter, setSmsClubFilter] = useState<number | ''>('');
+  const [smsSelectedIds, setSmsSelectedIds] = useState<number[]>([]);
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsDetailLog, setSmsDetailLog] = useState<SmsLog | null>(null);
   const queryClient = useQueryClient();
 
   const PHONE_PREFIXES = [
@@ -518,6 +528,35 @@ export default function AdminDashboard() {
     enabled: activeTab === 'about',
   });
 
+  // SMS Remain Query
+  const { data: smsRemain } = useQuery({
+    queryKey: ['smsRemain'],
+    queryFn: () => smsService.getRemain(),
+    enabled: activeTab === 'sms',
+  });
+
+  // SMS History Query
+  const { data: smsHistory, isLoading: smsHistoryLoading } = useQuery({
+    queryKey: ['smsHistory'],
+    queryFn: () => smsService.getHistory(),
+    enabled: activeTab === 'sms',
+  });
+
+  // SMS용 전체 회원 목록 (전화번호 있는 승인 회원)
+  const smsEligibleUsers = (users || []).filter(u => u.phone && u.is_approved && u.role !== 'pending');
+
+  // SMS 클럽별 필터된 회원 목록
+  const smsFilteredUsers = smsClubFilter
+    ? smsEligibleUsers.filter(u => u.assigned_club === smsClubFilter)
+    : smsEligibleUsers;
+
+  // SMS 탭 진입 또는 필터 변경 시 전체 선택 기본값
+  useEffect(() => {
+    if (activeTab === 'sms' && smsFilteredUsers.length > 0) {
+      setSmsSelectedIds(smsFilteredUsers.map(u => u.id));
+    }
+  }, [activeTab, smsClubFilter, smsFilteredUsers.length]);
+
   // All ChatRooms for club assignment
   const { data: allChatRooms } = useQuery({
     queryKey: ['allChatRoomsForAssignment'],
@@ -528,7 +567,7 @@ export default function AdminDashboard() {
       }
       return response.data as ChatRoom[];
     },
-    enabled: showClubModal || activeTab === 'members',
+    enabled: showClubModal || activeTab === 'members' || activeTab === 'sms',
   });
 
   // Room Messages Query (관리자용 - 모든 메시지 조회)
@@ -1062,6 +1101,7 @@ export default function AdminDashboard() {
             { key: 'messenger', label: '클럽 관리', badge: 0 },
             { key: 'banners', label: '배너 관리', badge: 0 },
             { key: 'organizations', label: '유관기관 관리', badge: 0 },
+            { key: 'sms', label: 'SMS 관리', badge: 0 },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -2913,6 +2953,316 @@ export default function AdminDashboard() {
             ) : (
               <div className="p-8 text-center text-gray-500">유관기관이 없습니다.</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* SMS Tab */}
+      {activeTab === 'sms' && (
+        <div className="space-y-6">
+          {/* 가격표 */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">SMS 가격표</h3>
+              <div className="px-4 py-2 bg-green-50 rounded-lg">
+                <span className="text-sm text-gray-600">잔여포인트 </span>
+                <span className="text-lg font-bold text-green-700">{smsRemain?.point != null ? `${smsRemain.point.toLocaleString()}P` : '-'}</span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="border border-gray-200 px-3 py-1.5 text-center text-xs">단문:SMS</th>
+                    <th className="border border-gray-200 px-3 py-1.5 text-center text-xs">장문:LMS</th>
+                    <th className="border border-gray-200 px-3 py-1.5 text-center text-xs">그림:MMS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-200 px-3 py-2.5 text-center font-bold text-green-600">
+                      {smsRemain?.SMS_CNT != null ? `${smsRemain.SMS_CNT.toLocaleString()}건` : '-'}
+                    </td>
+                    <td className="border border-gray-200 px-3 py-2.5 text-center font-bold text-blue-600">
+                      {smsRemain?.LMS_CNT != null ? `${smsRemain.LMS_CNT.toLocaleString()}건` : '-'}
+                    </td>
+                    <td className="border border-gray-200 px-3 py-2.5 text-center font-bold text-purple-600">
+                      {smsRemain?.MMS_CNT != null ? `${smsRemain.MMS_CNT.toLocaleString()}건` : '-'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SMS 발송 */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4">SMS 발송</h3>
+
+            {/* 클럽 필터 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">수신 대상</label>
+              <select
+                value={smsClubFilter}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSmsClubFilter(val === '' ? '' : Number(val));
+                }}
+                className="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+              >
+                <option value="">전체 회원</option>
+                {allChatRooms?.filter(r => !r.is_public).map(room => (
+                  <option key={room.id} value={room.id}>{room.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 회원 선택 */}
+            <div className="mb-4">
+              <div className="flex items-center mb-2">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={smsFilteredUsers.length > 0 && smsSelectedIds.length === smsFilteredUsers.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSmsSelectedIds(smsFilteredUsers.map(u => u.id));
+                      } else {
+                        setSmsSelectedIds([]);
+                      }
+                    }}
+                    className="mr-2 rounded text-green-600 focus:ring-green-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    수신자 전체 선택 ({smsSelectedIds.length}/{smsFilteredUsers.length}명)
+                  </span>
+                </label>
+              </div>
+              <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                {smsFilteredUsers.length > 0 ? smsFilteredUsers.map(u => (
+                  <label key={u.id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={smsSelectedIds.includes(u.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSmsSelectedIds(prev => [...prev, u.id]);
+                        } else {
+                          setSmsSelectedIds(prev => prev.filter(id => id !== u.id));
+                        }
+                      }}
+                      className="mr-3 rounded text-green-600 focus:ring-green-500"
+                    />
+                    <span className="text-sm">{u.username}</span>
+                    <span className="text-xs text-gray-400 ml-2">{u.phone}</span>
+                  </label>
+                )) : (
+                  <div className="p-4 text-center text-sm text-gray-500">
+                    전화번호가 등록된 회원이 없습니다.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 메시지 입력 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">메시지</label>
+              <textarea
+                value={smsMessage}
+                onChange={(e) => setSmsMessage(e.target.value)}
+                rows={4}
+                maxLength={2000}
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="메시지를 입력하세요..."
+              />
+              <div className="flex justify-between mt-1">
+                <span className={`text-xs ${new TextEncoder().encode(smsMessage).length > 90 ? 'text-blue-600 font-medium' : 'text-gray-400'}`}>
+                  {new TextEncoder().encode(smsMessage).length > 90 ? 'LMS (장문)' : 'SMS (단문)'}
+                </span>
+                <span className="text-xs text-gray-400">
+                  {new TextEncoder().encode(smsMessage).length} byte
+                </span>
+              </div>
+            </div>
+
+            {/* 발송 버튼 */}
+            <button
+              onClick={async () => {
+                if (smsSelectedIds.length === 0) {
+                  alert('수신자를 선택해주세요.');
+                  return;
+                }
+                if (!smsMessage.trim()) {
+                  alert('메시지를 입력해주세요.');
+                  return;
+                }
+                const msgType = new TextEncoder().encode(smsMessage).length > 90 ? 'LMS' : 'SMS';
+                const needed = msgType === 'LMS' ? smsRemain?.LMS_CNT : smsRemain?.SMS_CNT;
+                if (needed != null && needed < smsSelectedIds.length) {
+                  alert(`포인트가 부족합니다.\n${msgType} 잔여 ${needed}건 / 발송 대상 ${smsSelectedIds.length}명\n\n알리고 사이트에서 포인트를 충전해주세요.`);
+                  return;
+                }
+                if (!confirm(`${smsSelectedIds.length}명에게 ${msgType}를 발송하시겠습니까?`)) return;
+                setSmsSending(true);
+                try {
+                  const result = await smsService.sendSms({
+                    recipient_ids: smsSelectedIds,
+                    message: smsMessage,
+                    msg_type: msgType,
+                  });
+                  alert(result.message || '발송 완료');
+                  setSmsMessage('');
+                  setSmsSelectedIds([]);
+                  queryClient.invalidateQueries({ queryKey: ['smsHistory'] });
+                  queryClient.invalidateQueries({ queryKey: ['smsRemain'] });
+                } catch (err: any) {
+                  const errMsg = err.response?.data?.error || '발송 실패';
+                  if (errMsg.includes('포인트') || err.response?.data?.aligo_response?.result_code === '-100') {
+                    alert('포인트가 부족합니다.\n알리고 사이트에서 포인트를 충전해주세요.');
+                  } else {
+                    alert(errMsg);
+                  }
+                } finally {
+                  setSmsSending(false);
+                }
+              }}
+              disabled={smsSending || smsSelectedIds.length === 0 || !smsMessage.trim()}
+              className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
+            >
+              {smsSending ? '발송 중...' : `SMS 발송 (${smsSelectedIds.length}명)`}
+            </button>
+          </div>
+
+          {/* 발송 내역 */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4">발송 내역</h3>
+            {smsHistoryLoading ? (
+              <Loading />
+            ) : smsHistory && smsHistory.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left px-3 py-2">발송일</th>
+                      <th className="text-left px-3 py-2">발송자</th>
+                      <th className="text-left px-3 py-2">클럽</th>
+                      <th className="text-left px-3 py-2">유형</th>
+                      <th className="text-left px-3 py-2">수신</th>
+                      <th className="text-left px-3 py-2">메시지</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {smsHistory.map((log: SmsLog) => (
+                      <tr key={log.id} className="border-b hover:bg-gray-50">
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {new Date(log.created_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="px-3 py-2">{log.sender_name}</td>
+                        <td className="px-3 py-2">{log.club_name || '-'}</td>
+                        <td className="px-3 py-2">
+                          <span className={`px-1.5 py-0.5 rounded text-xs ${log.msg_type === 'LMS' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                            {log.msg_type}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">{log.recipients_count}명</td>
+                        <td className="px-3 py-2 max-w-xs truncate">{log.message}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => setSmsDetailLog(log)}
+                            className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                          >
+                            상세
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-8">발송 내역이 없습니다.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SMS Detail Modal */}
+      {smsDetailLog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-lg font-semibold">발송 상세</h3>
+              <button onClick={() => setSmsDetailLog(null)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1 space-y-4">
+              {/* 발송 정보 */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-gray-500">발송일</span>
+                  <p className="font-medium">{new Date(smsDetailLog.created_at).toLocaleString('ko-KR')}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">발송자</span>
+                  <p className="font-medium">{smsDetailLog.sender_name}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">유형</span>
+                  <p>
+                    <span className={`px-1.5 py-0.5 rounded text-xs ${smsDetailLog.msg_type === 'LMS' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                      {smsDetailLog.msg_type}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-500">수신자 수</span>
+                  <p className="font-medium">{smsDetailLog.recipients_count}명</p>
+                </div>
+              </div>
+
+              {/* 메시지 내용 */}
+              <div>
+                <span className="text-sm text-gray-500">메시지 내용</span>
+                <div className="mt-1 p-3 bg-gray-50 rounded-lg text-sm whitespace-pre-wrap break-words">
+                  {smsDetailLog.message}
+                </div>
+              </div>
+
+              {/* 수신자 목록 */}
+              <div>
+                <span className="text-sm text-gray-500">수신자 목록</span>
+                <div className="mt-1 border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                  {smsDetailLog.recipients_info && smsDetailLog.recipients_info.length > 0 ? (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b">
+                          <th className="text-left px-3 py-1.5 text-xs text-gray-500">이름</th>
+                          <th className="text-left px-3 py-1.5 text-xs text-gray-500">전화번호</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {smsDetailLog.recipients_info.map((r) => (
+                          <tr key={r.id} className="border-b last:border-0">
+                            <td className="px-3 py-1.5">{r.username}</td>
+                            <td className="px-3 py-1.5 text-gray-600">{r.phone}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="p-3 text-center text-gray-400 text-sm">수신자 정보 없음</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t">
+              <button
+                onClick={() => setSmsDetailLog(null)}
+                className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}

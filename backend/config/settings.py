@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "messenger",
     "schedule",
     "notices",
+    "sms",
 ]
 
 SITE_ID = 1
@@ -224,5 +225,10 @@ REST_AUTH = {
 }
 
 # Frontend URLs
+# Aligo SMS API
+ALIGO_API_KEY = os.environ.get('ALIGO_API_KEY', '')
+ALIGO_USER_ID = os.environ.get('ALIGO_USER_ID', '')
+ALIGO_SENDER = os.environ.get('ALIGO_SENDER', '')
+
 FRONTEND_URL = 'http://localhost:4112'
 GOOGLE_CALLBACK_URL = f'{FRONTEND_URL}/auth/google/callback'

@@ -331,6 +331,7 @@ export default function AdminDashboard() {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   const [albumPhotos, setAlbumPhotos] = useState<File[]>([]);
+  const [albumCoverIndex, setAlbumCoverIndex] = useState(0);
   const [showBannerForm, setShowBannerForm] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [showOrgForm, setShowOrgForm] = useState(false);
@@ -805,7 +806,7 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
 
-      setAlbumPhotos([]);
+      setAlbumPhotos([]); setAlbumCoverIndex(0);
       setShowAlbumForm(false);
       alert('앨범이 등록되었습니다.');
     },
@@ -820,7 +821,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
       setEditingAlbum(null);
 
-      setAlbumPhotos([]);
+      setAlbumPhotos([]); setAlbumCoverIndex(0);
       setShowAlbumForm(false);
       alert('앨범이 수정되었습니다.');
     },
@@ -1229,17 +1230,25 @@ export default function AdminDashboard() {
     formData.append('album_type', form.querySelector<HTMLSelectElement>('[name="album_type"]')?.value || 'public');
     formData.append('is_public', form.querySelector<HTMLInputElement>('[name="is_public"]')?.checked ? 'true' : 'false');
 
-    albumPhotos.forEach((photo) => {
-      formData.append('photos', photo);
-    });
-
     if (editingAlbum) {
+      albumPhotos.forEach((photo) => {
+        formData.append('photos', photo);
+      });
       updateAlbumMutation.mutate({ id: editingAlbum.id, data: formData });
     } else {
       if (albumPhotos.length === 0) {
         alert('사진을 1장 이상 추가해주세요.');
         return;
       }
+      // 대표로 선택된 사진을 맨 앞으로
+      const ordered = [...albumPhotos];
+      if (albumCoverIndex > 0 && albumCoverIndex < ordered.length) {
+        const [cover] = ordered.splice(albumCoverIndex, 1);
+        ordered.unshift(cover);
+      }
+      ordered.forEach((photo) => {
+        formData.append('photos', photo);
+      });
       createAlbumMutation.mutate(formData);
     }
   };
@@ -2574,11 +2583,11 @@ export default function AdminDashboard() {
               onClick={() => {
                 if (showAlbumForm && !editingAlbum) {
             
-                  setAlbumPhotos([]);
+                  setAlbumPhotos([]); setAlbumCoverIndex(0);
                 }
                 setEditingAlbum(null);
           
-                setAlbumPhotos([]);
+                setAlbumPhotos([]); setAlbumCoverIndex(0);
                 setShowAlbumForm(!showAlbumForm);
               }}
               className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
@@ -2665,8 +2674,36 @@ export default function AdminDashboard() {
                   name="photos"
                   multiple={true}
                   files={albumPhotos}
-                  onFilesChange={setAlbumPhotos}
+                  onFilesChange={(files) => {
+                    setAlbumPhotos(files);
+                    if (!editingAlbum) setAlbumCoverIndex(0);
+                  }}
                 />
+                {!editingAlbum && albumPhotos.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">대표 사진 선택 (클릭하여 지정)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {albumPhotos.map((file, idx) => {
+                        const isCover = idx === albumCoverIndex;
+                        return (
+                          <div key={`${file.name}-${idx}`} className="relative">
+                            <img
+                              src={URL.createObjectURL(file)}
+                              alt={file.name}
+                              className={`w-20 h-20 object-cover rounded cursor-pointer ${isCover ? 'ring-3 ring-green-500 border-2 border-green-500' : 'border border-gray-300 hover:ring-2 hover:ring-blue-300'}`}
+                              onClick={() => setAlbumCoverIndex(idx)}
+                            />
+                            {isCover && (
+                              <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                                대표
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -2692,7 +2729,7 @@ export default function AdminDashboard() {
                         setEditingAlbum(null);
                         setShowAlbumForm(false);
                   
-                        setAlbumPhotos([]);
+                        setAlbumPhotos([]); setAlbumCoverIndex(0);
                       }}
                       className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-400"
                     >
@@ -2737,7 +2774,7 @@ export default function AdminDashboard() {
                     <button
                       onClick={() => {
                         setEditingAlbum(album);
-                        setAlbumPhotos([]);
+                        setAlbumPhotos([]); setAlbumCoverIndex(0);
                         setShowAlbumForm(false);
                         setTimeout(() => albumFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
                       }}

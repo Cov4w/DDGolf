@@ -330,7 +330,6 @@ export default function AdminDashboard() {
   const [showEventForm, setShowEventForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
-  const [coverImage, setCoverImage] = useState<File[]>([]);
   const [albumPhotos, setAlbumPhotos] = useState<File[]>([]);
   const [showBannerForm, setShowBannerForm] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
@@ -805,7 +804,7 @@ export default function AdminDashboard() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
-      setCoverImage([]);
+
       setAlbumPhotos([]);
       setShowAlbumForm(false);
       alert('앨범이 등록되었습니다.');
@@ -820,7 +819,7 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
       setEditingAlbum(null);
-      setCoverImage([]);
+
       setAlbumPhotos([]);
       setShowAlbumForm(false);
       alert('앨범이 수정되었습니다.');
@@ -831,6 +830,15 @@ export default function AdminDashboard() {
     mutationFn: ({ albumId, photoId }: { albumId: number; photoId: number }) =>
       api.delete(`/gallery/albums/${albumId}/photos/${photoId}/`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminAlbums'] }),
+  });
+
+  const setCoverMutation = useMutation({
+    mutationFn: ({ albumId, photoId }: { albumId: number; photoId: number }) =>
+      api.post(`/gallery/albums/${albumId}/set_cover/${photoId}/`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
+      alert('대표 이미지가 변���되었습니다.');
+    },
   });
 
   // Ban Mutations
@@ -1221,10 +1229,6 @@ export default function AdminDashboard() {
     formData.append('album_type', form.querySelector<HTMLSelectElement>('[name="album_type"]')?.value || 'public');
     formData.append('is_public', form.querySelector<HTMLInputElement>('[name="is_public"]')?.checked ? 'true' : 'false');
 
-    if (coverImage.length > 0) {
-      formData.append('cover_image', coverImage[0]);
-    }
-
     albumPhotos.forEach((photo) => {
       formData.append('photos', photo);
     });
@@ -1232,7 +1236,7 @@ export default function AdminDashboard() {
     if (editingAlbum) {
       updateAlbumMutation.mutate({ id: editingAlbum.id, data: formData });
     } else {
-      if (albumPhotos.length === 0 && coverImage.length === 0) {
+      if (albumPhotos.length === 0) {
         alert('사진을 1장 이상 추가해주세요.');
         return;
       }
@@ -2569,11 +2573,11 @@ export default function AdminDashboard() {
             <button
               onClick={() => {
                 if (showAlbumForm && !editingAlbum) {
-                  setCoverImage([]);
+            
                   setAlbumPhotos([]);
                 }
                 setEditingAlbum(null);
-                setCoverImage([]);
+          
                 setAlbumPhotos([]);
                 setShowAlbumForm(!showAlbumForm);
               }}
@@ -2616,39 +2620,43 @@ export default function AdminDashboard() {
                     <option value="member">회원 전용 갤러리</option>
                   </select>
                 </div>
-                {editingAlbum?.cover_image && coverImage.length === 0 && (
-                  <div>
-                    <span className="block text-sm font-medium text-gray-700 mb-1">현재 커버 이미지</span>
-                    <img src={editingAlbum.cover_image} alt="현재 커버" className="w-32 h-32 object-cover rounded border" />
-                  </div>
-                )}
-                <FileDropZone
-                  label={editingAlbum?.cover_image ? '새 커버 이미지 (변경 시)' : '커버 이미지'}
-                  name="cover_image"
-                  multiple={false}
-                  files={coverImage}
-                  onFilesChange={setCoverImage}
-                />
                 {editingAlbum?.photos && editingAlbum.photos.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">기존 사진</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">기존 사진 (클릭하여 대표 지정)</label>
                     <div className="flex flex-wrap gap-2">
-                      {editingAlbum.photos.map((photo) => (
-                        <div key={photo.id} className="relative group">
-                          <img src={photo.image} alt="" className="w-20 h-20 object-cover rounded border" />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm('이 사진을 삭제하시겠습니까?')) {
-                                deletePhotoMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
-                              }
-                            }}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            X
-                          </button>
-                        </div>
-                      ))}
+                      {editingAlbum.photos.map((photo) => {
+                        const isCover = editingAlbum.cover_image && photo.image === editingAlbum.cover_image;
+                        return (
+                          <div key={photo.id} className="relative group">
+                            <img
+                              src={photo.image}
+                              alt=""
+                              className={`w-20 h-20 object-cover rounded cursor-pointer ${isCover ? 'ring-3 ring-green-500 border-2 border-green-500' : 'border border-gray-300 hover:ring-2 hover:ring-blue-300'}`}
+                              onClick={() => {
+                                if (!isCover) {
+                                  setCoverMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
+                                }
+                              }}
+                            />
+                            {isCover && (
+                              <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                                대표
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm('이 사진을 삭제하시겠습니까?')) {
+                                  deletePhotoMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
+                                }
+                              }}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              X
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -2683,7 +2691,7 @@ export default function AdminDashboard() {
                       onClick={() => {
                         setEditingAlbum(null);
                         setShowAlbumForm(false);
-                        setCoverImage([]);
+                  
                         setAlbumPhotos([]);
                       }}
                       className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-400"
@@ -2729,7 +2737,6 @@ export default function AdminDashboard() {
                     <button
                       onClick={() => {
                         setEditingAlbum(album);
-                        setCoverImage([]);
                         setAlbumPhotos([]);
                         setShowAlbumForm(false);
                         setTimeout(() => albumFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);

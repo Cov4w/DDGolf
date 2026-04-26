@@ -52,13 +52,27 @@ class AlbumViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         album = serializer.save(author=self.request.user)
-        for photo in self.request.FILES.getlist('photos'):
-            Photo.objects.create(album=album, image=photo)
+        photos = self.request.FILES.getlist('photos')
+        first_photo = None
+        for photo_file in photos:
+            p = Photo.objects.create(album=album, image=photo_file)
+            if first_photo is None:
+                first_photo = p
+        if not album.cover_image and first_photo:
+            album.cover_image = first_photo.image
+            album.save(update_fields=['cover_image'])
 
     def perform_update(self, serializer):
         album = serializer.save()
-        for photo in self.request.FILES.getlist('photos'):
-            Photo.objects.create(album=album, image=photo)
+        photos = self.request.FILES.getlist('photos')
+        first_photo = None
+        for photo_file in photos:
+            p = Photo.objects.create(album=album, image=photo_file)
+            if first_photo is None:
+                first_photo = p
+        if not album.cover_image and first_photo:
+            album.cover_image = first_photo.image
+            album.save(update_fields=['cover_image'])
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def add_photo(self, request, pk=None):
@@ -87,6 +101,22 @@ class AlbumViewSet(viewsets.ModelViewSet):
             photo = album.photos.get(pk=photo_pk)
             photo.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
+        except Photo.DoesNotExist:
+            return Response(
+                {'error': '사진을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(detail=True, methods=['post'], url_path='set_cover/(?P<photo_pk>[^/.]+)',
+            permission_classes=[permissions.IsAdminUser])
+    def set_cover(self, request, pk=None, photo_pk=None):
+        """사진을 앨범 대표 이미지로 지정"""
+        album = self.get_object()
+        try:
+            photo = album.photos.get(pk=photo_pk)
+            album.cover_image = photo.image
+            album.save(update_fields=['cover_image'])
+            return Response({'message': '대표 이미지가 변경되었습니다.'})
         except Photo.DoesNotExist:
             return Response(
                 {'error': '사진을 찾을 수 없습니다.'},

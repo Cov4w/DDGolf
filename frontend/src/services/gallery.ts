@@ -44,4 +44,8 @@ export const galleryService = {
   deletePhoto: async (albumId: number, photoId: number): Promise<void> => {
     await api.delete(`/gallery/albums/${albumId}/photos/${photoId}/`);
   },
+
+  setCover: async (albumId: number, photoId: number): Promise<void> => {
+    await api.post(`/gallery/albums/${albumId}/set_cover/${photoId}/`);
+  },
 };

@@ -1232,6 +1232,10 @@ export default function AdminDashboard() {
     if (editingAlbum) {
       updateAlbumMutation.mutate({ id: editingAlbum.id, data: formData });
     } else {
+      if (albumPhotos.length === 0 && coverImage.length === 0) {
+        alert('사진을 1장 이상 추가해주세요.');
+        return;
+      }
       createAlbumMutation.mutate(formData);
     }
   };

@@ -53,6 +53,20 @@ export default function GalleryDetail() {
             </div>
           ))}
         </div>
+      ) : album.cover_image ? (
+        <div>
+          <div
+            className="cursor-pointer inline-block"
+            onClick={() => setSelectedPhoto(album.cover_image!)}
+          >
+            <img
+              src={album.cover_image}
+              alt={album.title}
+              className="w-full max-w-2xl h-auto object-cover rounded-lg hover:opacity-90 transition-opacity"
+            />
+          </div>
+          <p className="text-sm text-gray-400 mt-2">대표 이미지</p>
+        </div>
       ) : (
         <div className="text-center py-12 text-gray-500">
           등록된 사진이 없습니다.

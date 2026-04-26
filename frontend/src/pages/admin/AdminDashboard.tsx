@@ -34,12 +34,16 @@ function FileDropZone({
   multiple = false,
   files,
   onFilesChange,
+  coverIndex,
+  onCoverSelect,
 }: {
   label: string;
   name: string;
   multiple?: boolean;
   files: File[];
   onFilesChange: (files: File[]) => void;
+  coverIndex?: number;
+  onCoverSelect?: (index: number) => void;
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -137,28 +141,49 @@ function FileDropZone({
       {/* 선택된 파일 미리보기 */}
       {files.length > 0 && (
         <div className="mt-3">
-          <p className="text-sm text-gray-600 mb-2">선택된 파일 ({files.length}개)</p>
+          <p className="text-sm text-gray-600 mb-2">
+            선택된 파일 ({files.length}개)
+            {onCoverSelect && ' - 클릭하여 대표 지정'}
+          </p>
           <div className="flex flex-wrap gap-2">
-            {files.map((file, index) => (
-              <div key={index} className="relative group">
-                <img
-                  src={URL.createObjectURL(file)}
-                  alt={file.name}
-                  className="w-20 h-20 object-cover rounded-lg border border-gray-200"
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeFile(index);
-                  }}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  X
-                </button>
-                <p className="text-xs text-gray-500 truncate w-20 mt-1">{file.name}</p>
-              </div>
-            ))}
+            {files.map((file, index) => {
+              const isCover = onCoverSelect && coverIndex === index;
+              return (
+                <div key={index} className="relative group">
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={file.name}
+                    className={`w-20 h-20 object-cover rounded-lg ${
+                      isCover
+                        ? 'ring-3 ring-green-500 border-2 border-green-500'
+                        : 'border border-gray-200'
+                    } ${onCoverSelect ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : ''}`}
+                    onClick={(e) => {
+                      if (onCoverSelect) {
+                        e.stopPropagation();
+                        onCoverSelect(index);
+                      }
+                    }}
+                  />
+                  {isCover && (
+                    <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                      대표
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile(index);
+                    }}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    X
+                  </button>
+                  <p className="text-xs text-gray-500 truncate w-20 mt-1">{file.name}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -2634,7 +2659,7 @@ export default function AdminDashboard() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">기존 사진 (클릭하여 대표 지정)</label>
                     <div className="flex flex-wrap gap-2">
                       {editingAlbum.photos.map((photo) => {
-                        const isCover = editingAlbum.cover_image && photo.image === editingAlbum.cover_image;
+                        const isCover = editingAlbum.cover_photo_id === photo.id;
                         return (
                           <div key={photo.id} className="relative group">
                             <img
@@ -2678,32 +2703,8 @@ export default function AdminDashboard() {
                     setAlbumPhotos(files);
                     if (!editingAlbum) setAlbumCoverIndex(0);
                   }}
+                  {...(!editingAlbum ? { coverIndex: albumCoverIndex, onCoverSelect: setAlbumCoverIndex } : {})}
                 />
-                {!editingAlbum && albumPhotos.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">대표 사진 선택 (클릭하여 지정)</label>
-                    <div className="flex flex-wrap gap-2">
-                      {albumPhotos.map((file, idx) => {
-                        const isCover = idx === albumCoverIndex;
-                        return (
-                          <div key={`${file.name}-${idx}`} className="relative">
-                            <img
-                              src={URL.createObjectURL(file)}
-                              alt={file.name}
-                              className={`w-20 h-20 object-cover rounded cursor-pointer ${isCover ? 'ring-3 ring-green-500 border-2 border-green-500' : 'border border-gray-300 hover:ring-2 hover:ring-blue-300'}`}
-                              onClick={() => setAlbumCoverIndex(idx)}
-                            />
-                            {isCover && (
-                              <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                                대표
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"

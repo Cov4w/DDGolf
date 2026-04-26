@@ -74,6 +74,7 @@ export interface Album {
   title: string;
   description: string;
   cover_image?: string;
+  cover_photo_id?: number | null;
   author: User;
   album_type: 'public' | 'member';
   is_public: boolean;

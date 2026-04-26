@@ -12,6 +12,14 @@ class Album(models.Model):
     title = models.CharField('제목', max_length=200)
     description = models.TextField('설명', blank=True)
     cover_image = models.ImageField('커버 이미지', upload_to='gallery/covers/', blank=True, null=True)
+    cover_photo = models.ForeignKey(
+        'Photo',
+        on_delete=models.SET_NULL,
+        related_name='+',
+        verbose_name='대표 사진',
+        blank=True,
+        null=True,
+    )
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

@@ -53,10 +53,11 @@ class AlbumAdminSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     photos = PhotoSerializer(many=True, read_only=True)
     photo_count = serializers.SerializerMethodField()
+    cover_photo_id = serializers.IntegerField(source='cover_photo.id', read_only=True, default=None)
 
     class Meta:
         model = Album
-        fields = ['id', 'title', 'description', 'cover_image', 'author',
+        fields = ['id', 'title', 'description', 'cover_image', 'cover_photo_id', 'author',
                   'album_type', 'is_public', 'is_hidden', 'photos', 'photo_count',
                   'created_at', 'updated_at']
         read_only_fields = ['id', 'author', 'created_at', 'updated_at']

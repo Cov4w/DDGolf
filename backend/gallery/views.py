@@ -58,9 +58,10 @@ class AlbumViewSet(viewsets.ModelViewSet):
             p = Photo.objects.create(album=album, image=photo_file)
             if first_photo is None:
                 first_photo = p
-        if not album.cover_image and first_photo:
+        if first_photo and not album.cover_photo:
+            album.cover_photo = first_photo
             album.cover_image = first_photo.image
-            album.save(update_fields=['cover_image'])
+            album.save(update_fields=['cover_photo', 'cover_image'])
 
     def perform_update(self, serializer):
         album = serializer.save()
@@ -70,9 +71,10 @@ class AlbumViewSet(viewsets.ModelViewSet):
             p = Photo.objects.create(album=album, image=photo_file)
             if first_photo is None:
                 first_photo = p
-        if not album.cover_image and first_photo:
+        if first_photo and not album.cover_photo:
+            album.cover_photo = first_photo
             album.cover_image = first_photo.image
-            album.save(update_fields=['cover_image'])
+            album.save(update_fields=['cover_photo', 'cover_image'])
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def add_photo(self, request, pk=None):
@@ -114,9 +116,10 @@ class AlbumViewSet(viewsets.ModelViewSet):
         album = self.get_object()
         try:
             photo = album.photos.get(pk=photo_pk)
+            album.cover_photo = photo
             album.cover_image = photo.image
-            album.save(update_fields=['cover_image'])
-            return Response({'message': '대표 이미지가 변경되었습니다.'})
+            album.save(update_fields=['cover_photo', 'cover_image'])
+            return Response({'message': '대표 이미지가 변경되었습니다.', 'cover_photo_id': photo.id})
         except Photo.DoesNotExist:
             return Response(
                 {'error': '사진을 찾을 수 없습니다.'},

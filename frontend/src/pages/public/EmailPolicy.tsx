@@ -4,7 +4,7 @@ export default function EmailPolicy() {
       <div className="bg-gradient-to-r from-green-800 to-green-700 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-3xl font-bold text-white">이메일무단수집거부</h1>
-          <p className="text-green-100 mt-2">DDGA - 대덕구골프협회</p>
+          <p className="text-green-100 mt-2">Dae Deok gu Golf Association - 대덕구골프협회</p>
         </div>
       </div>
 

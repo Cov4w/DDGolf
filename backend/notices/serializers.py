@@ -1,6 +1,15 @@
 from rest_framework import serializers
-from .models import Notice, Banner, Organization, AboutContent, Executive
+from .models import Notice, Banner, Organization, AboutContent, Executive, History
 from accounts.serializers import UserSerializer
+
+
+class HistorySerializer(serializers.ModelSerializer):
+    """연혁 시리얼라이저"""
+
+    class Meta:
+        model = History
+        fields = ['id', 'year', 'content', 'detail', 'order']
+        read_only_fields = ['id']
 
 
 class NoticeListSerializer(serializers.ModelSerializer):
@@ -47,11 +56,20 @@ class NoticeAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notice
         fields = ['id', 'title', 'content', 'author', 'visibility', 'visibility_display',
-                  'is_important', 'is_hidden', 'views', 'club', 'club_name', 'created_at', 'updated_at']
+                  'is_important', 'is_hidden', 'is_popup', 'popup_image', 'popup_content',
+                  'linked_event', 'views', 'club', 'club_name', 'created_at', 'updated_at']
         read_only_fields = ['id', 'author', 'views', 'created_at', 'updated_at']
 
     def get_club_name(self, obj):
         return obj.club.name if obj.club else None
+
+
+class NoticePopupSerializer(serializers.ModelSerializer):
+    """팝업 공지사항 시리얼라이저"""
+
+    class Meta:
+        model = Notice
+        fields = ['id', 'title', 'popup_image', 'popup_content', 'linked_event', 'created_at']
 
 
 class BannerSerializer(serializers.ModelSerializer):

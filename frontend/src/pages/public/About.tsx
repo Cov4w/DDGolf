@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { noticesService } from '../../services/notices';
 import ClubImageModal from '../../components/common/ClubImageModal';
-import type { PublicClubItem } from '../../types';
+import type { PublicClubItem, History } from '../../types';
 
 type Section = 'greeting' | 'clubs' | 'executives';
 
@@ -15,6 +15,12 @@ export default function About() {
   const { data: aboutContent } = useQuery({
     queryKey: ['aboutContent'],
     queryFn: () => noticesService.getAboutContent(),
+  });
+
+  const { data: histories } = useQuery({
+    queryKey: ['histories'],
+    queryFn: () => noticesService.getHistories(),
+    enabled: activeSection === 'greeting',
   });
 
   const { data: clubs } = useQuery({
@@ -47,7 +53,7 @@ export default function About() {
       <div className="bg-gradient-to-r from-green-800 to-green-700 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-3xl font-bold text-white">협회소개</h1>
-          <p className="text-green-100 mt-2">DDGA - 대덕구골프협회</p>
+          <p className="text-green-100 mt-2">Dae Deok gu Golf Association - 대덕구골프협회</p>
         </div>
       </div>
 
@@ -82,52 +88,85 @@ export default function About() {
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
 
-        {/* 인사말 */}
+        {/* 인사말 + 연혁 */}
         {activeSection === 'greeting' && (
-          <section>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 pb-3 border-b-2 border-green-700">
-              인사말
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="md:col-span-2">
-                {aboutContent?.greeting_text ? (
-                  aboutContent.greeting_text.split('\n').map((line, i) => (
-                    <p key={i} className="text-gray-600 leading-relaxed mb-4">
-                      {line}
-                    </p>
-                  ))
-                ) : (
-                  <>
-                    <p className="text-gray-600 leading-relaxed mb-4">
-                      안녕하십니까. 대덕구골프협회 홈페이지를 방문해 주신 여러분을 진심으로 환영합니다.
-                    </p>
-                    <p className="text-gray-600 leading-relaxed mb-4">
-                      본 협회는 골프 스포츠의 진흥과 보급을 통하여 골프 저변확대를 위한 목적으로
-                      설립되었으며, 골프 발전에 전력하고 있습니다.
-                    </p>
-                    <p className="text-gray-600 leading-relaxed mb-4">
-                      우리 협회는 회원 여러분의 골프 실력 향상과 친목 도모를 위해 다양한 프로그램을
-                      운영하고 있으며, 정기적인 대회와 모임을 통해 회원 간의 유대를 강화하고 있습니다.
-                    </p>
-                    <p className="text-gray-600 leading-relaxed">
-                      앞으로도 회원 여러분의 많은 관심과 참여를 부탁드리며, 대덕구골프협회가 여러분과
-                      함께 성장할 수 있도록 최선을 다하겠습니다. 감사합니다.
-                    </p>
-                  </>
-                )}
-                <p className="mt-6 text-right text-gray-700 font-medium">
-                  {aboutContent?.greeting_author || '대덕구골프협회장'}
-                </p>
+          <div className="space-y-12">
+            {/* 인사말 */}
+            <section>
+              <h2 className="text-2xl font-bold text-gray-800 mb-6 pb-3 border-b-2 border-green-700">
+                인사말
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="md:col-span-2">
+                  {aboutContent?.greeting_text ? (
+                    aboutContent.greeting_text.split('\n').map((line, i) => (
+                      <p key={i} className="text-gray-600 leading-relaxed mb-4">
+                        {line}
+                      </p>
+                    ))
+                  ) : (
+                    <>
+                      <p className="text-gray-600 leading-relaxed mb-4">
+                        안녕하십니까. 대덕구골프협회 홈페이지를 방문해 주신 여러분을 진심으로 환영합니다.
+                      </p>
+                      <p className="text-gray-600 leading-relaxed mb-4">
+                        본 협회는 골프 스포츠의 진흥과 보급을 통하여 골프 저변확대를 위한 목적으로
+                        설립되었으며, 골프 발전에 전력하고 있습니다.
+                      </p>
+                      <p className="text-gray-600 leading-relaxed mb-4">
+                        우리 협회는 회원 여러분의 골프 실력 향상과 친목 도모를 위해 다양한 프로그램을
+                        운영하고 있으며, 정기적인 대회와 모임을 통해 회원 간의 유대를 강화하고 있습니다.
+                      </p>
+                      <p className="text-gray-600 leading-relaxed">
+                        앞으로도 회원 여러분의 많은 관심과 참여를 부탁드리며, 대덕구골프협회가 여러분과
+                        함께 성장할 수 있도록 최선을 다하겠습니다. 감사합니다.
+                      </p>
+                    </>
+                  )}
+                  <p className="mt-6 text-right text-gray-700 font-medium">
+                    {aboutContent?.greeting_author || '대덕구골프협회장'}
+                  </p>
+                </div>
+                <div className="flex items-start justify-center">
+                  <img
+                    src={getImageUrl(aboutContent?.greeting_image) || '/images/chairman.jpg'}
+                    alt="협회장"
+                    className="w-48 rounded-lg shadow-md object-cover"
+                  />
+                </div>
               </div>
-              <div className="flex items-start justify-center">
-                <img
-                  src={getImageUrl(aboutContent?.greeting_image) || '/images/chairman.jpg'}
-                  alt="협회장"
-                  className="w-48 rounded-lg shadow-md object-cover"
-                />
-              </div>
-            </div>
-          </section>
+            </section>
+
+            {/* 연혁 (인사말 아래에 바로 표시) */}
+            {histories && histories.length > 0 && (
+              <section>
+                <h2 className="text-2xl font-bold text-gray-800 mb-6 pb-3 border-b-2 border-green-700">
+                  연혁
+                </h2>
+                <div className="relative">
+                  <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-green-200" />
+                  <div className="space-y-6">
+                    {histories.map((item: History) => (
+                      <div key={item.id} className="relative flex items-start gap-6 pl-4">
+                        <div className="relative z-10 flex-shrink-0 w-8 h-8 bg-green-700 rounded-full flex items-center justify-center">
+                          <div className="w-2.5 h-2.5 bg-white rounded-full" />
+                        </div>
+                        <div className="flex-1 pb-2">
+                          <span className="inline-block bg-green-700 text-white text-sm font-bold px-3 py-1 rounded mb-2">
+                            {item.year}
+                          </span>
+                          <p className="text-gray-700 leading-relaxed">{item.content}</p>
+                          {item.detail && (
+                            <p className="text-sm text-gray-500 mt-1 leading-relaxed">{item.detail}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+          </div>
         )}
 
         {/* 클럽현황 */}

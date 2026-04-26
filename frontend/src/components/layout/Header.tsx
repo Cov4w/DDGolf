@@ -60,7 +60,7 @@ export default function Header() {
               <img src="/images/logo.png" alt="DDGA 로고" className="w-12 h-12 object-contain" />
               <div>
                 <h1 className="text-xl font-bold text-green-800">대덕구골프협회</h1>
-                <p className="text-xs text-green-600">DDGA</p>
+                <p className="text-xs text-green-600">Dae Deok gu Golf Association</p>
               </div>
             </Link>
 

@@ -102,11 +102,34 @@ export interface Notice {
   visibility_display?: string;
   is_important: boolean;
   is_hidden: boolean;
+  is_popup?: boolean;
+  popup_image?: string | null;
+  popup_content?: string;
+  linked_event?: number | null;
   views: number;
   club?: number | null;
   club_name?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// 팝업 공지사항
+export interface PopupNotice {
+  id: number;
+  title: string;
+  popup_image: string | null;
+  popup_content: string;
+  linked_event: number | null;
+  created_at: string;
+}
+
+// 연혁
+export interface History {
+  id: number;
+  year: number;
+  content: string;
+  detail: string;
+  order: number;
 }
 
 // 일정

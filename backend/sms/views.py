@@ -165,3 +165,25 @@ class SmsHistoryView(APIView):
 
         serializer = SmsLogSerializer(logs[:50], many=True)
         return Response(serializer.data)
+
+
+class SmsLogDeleteView(APIView):
+    """SMS 발송 내역 삭제"""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        user = request.user
+        if user.role != 'admin':
+            return Response(
+                {'error': '관리자만 삭제할 수 있습니다.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            log = SmsLog.objects.get(pk=pk)
+            log.delete()
+            return Response({'message': '삭제되었습니다.'}, status=status.HTTP_200_OK)
+        except SmsLog.DoesNotExist:
+            return Response(
+                {'error': '발송 내역을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )

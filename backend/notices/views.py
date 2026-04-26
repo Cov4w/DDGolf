@@ -4,12 +4,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Notice, Banner, Organization, AboutContent, Executive
+from .models import Notice, Banner, Organization, AboutContent, Executive, History
 from .serializers import (
     NoticeListSerializer, NoticeDetailSerializer,
     NoticeCreateSerializer, NoticeAdminSerializer,
     BannerSerializer, OrganizationSerializer, AboutContentSerializer,
-    ExecutiveSerializer
+    ExecutiveSerializer, HistorySerializer, NoticePopupSerializer
 )
 
 
@@ -138,7 +138,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 {'detail': '권한이 없습니다.'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        serializer = NoticeListSerializer(queryset, many=True)
+        serializer = NoticeAdminSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
 
 
@@ -278,3 +278,47 @@ class ExecutiveViewSet(viewsets.ModelViewSet):
             exec_obj.save()
             next_obj.save()
         return Response({'message': '순서가 변경되었습니다.'})
+
+
+class HistoryViewSet(viewsets.ModelViewSet):
+    """연혁 ViewSet"""
+    queryset = History.objects.all()
+    serializer_class = HistorySerializer
+    pagination_class = None
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def move_up(self, request, pk=None):
+        """연혁 순서 위로"""
+        obj = self.get_object()
+        prev_obj = History.objects.filter(order__lt=obj.order).order_by('-order').first()
+        if prev_obj:
+            obj.order, prev_obj.order = prev_obj.order, obj.order
+            obj.save()
+            prev_obj.save()
+        return Response({'message': '순서가 변경되었습니다.'})
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def move_down(self, request, pk=None):
+        """연혁 순서 아래로"""
+        obj = self.get_object()
+        next_obj = History.objects.filter(order__gt=obj.order).order_by('order').first()
+        if next_obj:
+            obj.order, next_obj.order = next_obj.order, obj.order
+            obj.save()
+            next_obj.save()
+        return Response({'message': '순서가 변경되었습니다.'})
+
+
+class PopupNoticeView(APIView):
+    """활성 팝업 공지사항 목록 API"""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        notices = Notice.objects.filter(is_popup=True, is_hidden=False)
+        serializer = NoticePopupSerializer(notices, many=True, context={'request': request})
+        return Response(serializer.data)

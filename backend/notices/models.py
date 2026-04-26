@@ -2,6 +2,22 @@ from django.db import models
 from django.conf import settings
 
 
+class History(models.Model):
+    """협회 연혁"""
+    year = models.IntegerField('연도')
+    content = models.CharField('내용', max_length=500)
+    detail = models.TextField('상세 내용', blank=True, default='')
+    order = models.PositiveIntegerField('순서', default=0)
+
+    class Meta:
+        verbose_name = '연혁'
+        verbose_name_plural = '연혁 목록'
+        ordering = ['order', '-year']
+
+    def __str__(self):
+        return f'{self.year} - {self.content}'
+
+
 class Notice(models.Model):
     """공지사항"""
 
@@ -34,6 +50,17 @@ class Notice(models.Model):
     )
     is_important = models.BooleanField('중요 공지', default=False)
     is_hidden = models.BooleanField('숨김', default=False)
+    is_popup = models.BooleanField('팝업 표시', default=False)
+    popup_image = models.ImageField('팝업 이미지', upload_to='popup/', blank=True, null=True)
+    popup_content = models.TextField('팝업 문구', blank=True, default='')
+    linked_event = models.ForeignKey(
+        'schedule.Event',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='popup_notices',
+        verbose_name='연결 경기일정',
+    )
     views = models.PositiveIntegerField('조회수', default=0)
     created_at = models.DateTimeField('작성일', auto_now_add=True)
     updated_at = models.DateTimeField('수정일', auto_now=True)

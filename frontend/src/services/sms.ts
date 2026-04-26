@@ -27,4 +27,8 @@ export const smsService = {
     const response = await api.get('/sms/history/');
     return response.data as SmsLog[];
   },
+
+  deleteSmsLog: async (id: number): Promise<void> => {
+    await api.delete(`/sms/history/${id}/`);
+  },
 };

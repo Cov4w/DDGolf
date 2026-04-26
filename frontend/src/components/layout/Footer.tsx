@@ -48,7 +48,7 @@ export default function Footer() {
               T. 042-624-7080 | F. 0504-224-2549 | 사업자번호 160-80-03320
             </p>
             <p className="text-xs text-gray-400 mt-4">
-              Copyright &copy; {new Date().getFullYear()} 대덕구골프협회(DDGA). All Rights Reserved.
+              Copyright &copy; {new Date().getFullYear()} 대덕구골프협회(Dae Deok gu Golf Association). All Rights Reserved.
             </p>
           </div>
         </div>

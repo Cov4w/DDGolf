@@ -1,132 +1,66 @@
-import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { noticesService } from '../../services/notices';
 
 export default function BannerSlider() {
-  const [currentIndex, setCurrentIndex] = useState(0);
-
   const { data: banners } = useQuery({
     queryKey: ['banners'],
     queryFn: () => noticesService.getBanners(),
-    staleTime: 0, // 항상 새로 가져오기
+    staleTime: 0,
   });
 
   const activeBanners = banners?.filter((b) => b.is_active) || [];
 
-  // 5초마다 자동 전환
-  useEffect(() => {
-    if (activeBanners.length <= 1) return;
-
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % activeBanners.length);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [activeBanners.length]);
-
   if (activeBanners.length === 0) return null;
 
-  const goToSlide = (index: number) => {
-    setCurrentIndex(index);
-  };
-
-  const goToPrevious = () => {
-    if (activeBanners.length <= 1) return;
-    setCurrentIndex((prev) => (prev - 1 + activeBanners.length) % activeBanners.length);
-  };
-
-  const goToNext = () => {
-    if (activeBanners.length <= 1) return;
-    setCurrentIndex((prev) => (prev + 1) % activeBanners.length);
-  };
+  // 한 세트가 화면을 넘길 수 있도록 충분히 복제
+  // 아이템 너비(200px) + 양쪽 마진(~32px) = ~232px
+  const copiesPerSet = Math.max(Math.ceil(2000 / (activeBanners.length * 232)), 1);
+  const oneSet = Array.from({ length: copiesPerSet }, () => activeBanners).flat();
+  // 동일한 세트 2개 → translateX(-50%)로 완벽 루프
+  const items = [...oneSet, ...oneSet];
+  const duration = Math.max(oneSet.length * 3, 12);
 
   return (
-    <section className="max-w-7xl mx-auto px-4 py-6">
-      <div className="relative bg-white rounded-lg shadow-md overflow-hidden">
-        {/* 배너 콘텐츠 - 크로스페이드 */}
-        <div className="relative h-48 md:h-64">
-          {activeBanners.map((banner, index) => {
-            const content = (
-              <>
-                <img
-                  src={banner.image}
-                  alt={banner.description}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                <div className="absolute bottom-12 left-4 right-4 text-white">
-                  <p className="text-lg md:text-xl font-semibold mb-1">
-                    {banner.description}
-                  </p>
-                  <p className="text-sm md:text-base opacity-90">
-                    문의: {banner.phone_number}
-                  </p>
-                </div>
-              </>
-            );
-            return banner.link ? (
-              <a
-                key={banner.id}
-                href={banner.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="absolute inset-0 transition-opacity duration-700 ease-in-out cursor-pointer"
-                style={{ opacity: index === currentIndex ? 1 : 0, pointerEvents: index === currentIndex ? 'auto' : 'none' }}
-              >
-                {content}
-              </a>
-            ) : (
-              <div
-                key={banner.id}
-                className="absolute inset-0 transition-opacity duration-700 ease-in-out"
-                style={{ opacity: index === currentIndex ? 1 : 0 }}
-              >
-                {content}
-              </div>
-            );
-          })}
-
-          {/* 좌우 화살표 - 항상 표시 */}
-          <button
-            onClick={goToPrevious}
-            disabled={activeBanners.length <= 1}
-            className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 disabled:bg-black/20 disabled:cursor-not-allowed text-white w-10 h-10 rounded-full flex items-center justify-center transition-colors z-10"
-            aria-label="이전 배너"
+    <section className="max-w-7xl mx-auto px-4 py-4 overflow-hidden">
+      <style>{`
+        @keyframes bannerMarquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .banner-marquee-track {
+          display: flex;
+          animation: bannerMarquee ${duration}s linear infinite;
+        }
+        .banner-marquee-track:hover {
+          animation-play-state: paused;
+        }
+      `}</style>
+      <div className="banner-marquee-track" style={{ width: 'max-content' }}>
+        {items.map((banner, idx) => (
+          <a
+            key={`b-${banner.id}-${idx}`}
+            href={banner.link || undefined}
+            target={banner.link ? '_blank' : undefined}
+            rel={banner.link ? 'noopener noreferrer' : undefined}
+            className="group flex flex-col items-center flex-shrink-0 mx-4 md:mx-6"
+            title={banner.description}
+            onClick={(e) => { if (!banner.link) e.preventDefault(); }}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            onClick={goToNext}
-            disabled={activeBanners.length <= 1}
-            className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 disabled:bg-black/20 disabled:cursor-not-allowed text-white w-10 h-10 rounded-full flex items-center justify-center transition-colors z-10"
-            aria-label="다음 배너"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-
-        {/* 하단 인디케이터 바 */}
-        <div className="bg-gray-900/80 px-4 py-2 flex items-center justify-center">
-          {/* 점 인디케이터 */}
-          <div className="flex gap-2">
-            {activeBanners.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => goToSlide(index)}
-                className={`w-2.5 h-2.5 rounded-full transition-all ${
-                  index === currentIndex
-                    ? 'bg-white scale-110'
-                    : 'bg-white/40 hover:bg-white/60'
-                }`}
-                aria-label={`배너 ${index + 1}`}
+            <div
+              className="rounded-lg bg-white border border-gray-200 overflow-hidden group-hover:border-green-300 group-hover:shadow-md transition-all"
+              style={{ width: '200px', height: '70px' }}
+            >
+              <img
+                src={banner.image}
+                alt={banner.description}
+                className="w-full h-full object-cover"
               />
-            ))}
-          </div>
-        </div>
+            </div>
+            <span className="mt-1.5 text-xs text-gray-500 group-hover:text-green-700 transition-colors text-center truncate max-w-[200px]">
+              {banner.description}
+            </span>
+          </a>
+        ))}
       </div>
     </section>
   );

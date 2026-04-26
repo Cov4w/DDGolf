@@ -51,7 +51,14 @@ class AlbumViewSet(viewsets.ModelViewSet):
         return AlbumDetailSerializer
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        album = serializer.save(author=self.request.user)
+        for photo in self.request.FILES.getlist('photos'):
+            Photo.objects.create(album=album, image=photo)
+
+    def perform_update(self, serializer):
+        album = serializer.save()
+        for photo in self.request.FILES.getlist('photos'):
+            Photo.objects.create(album=album, image=photo)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def add_photo(self, request, pk=None):

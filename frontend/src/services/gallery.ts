@@ -23,8 +23,10 @@ export const galleryService = {
     return response.data;
   },
 
-  updateAlbum: async (id: number, data: Partial<Album>): Promise<Album> => {
-    const response = await api.patch(`/gallery/albums/${id}/`, data);
+  updateAlbum: async (id: number, data: FormData): Promise<Album> => {
+    const response = await api.patch(`/gallery/albums/${id}/`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data;
   },
 

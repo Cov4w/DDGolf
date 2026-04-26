@@ -7,7 +7,7 @@ from .views import (
     UserToggleClubMembershipView, UserAssignClubView,
     SendVerificationCodeView, VerifyCodeView, GoogleLoginView,
     VerifyPasswordView, ChangePasswordView, CustomTokenObtainPairView,
-    PendingUserCountView, AdminNotificationsView
+    PendingUserCountView, AdminNotificationsView, DashboardStatsView
 )
 
 urlpatterns = [
@@ -30,6 +30,7 @@ urlpatterns = [
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
 
     # 관리자
+    path('users/dashboard-stats/', DashboardStatsView.as_view(), name='dashboard-stats'),
     path('users/pending-count/', PendingUserCountView.as_view(), name='pending-user-count'),
     path('users/admin-notifications/', AdminNotificationsView.as_view(), name='admin-notifications'),
     path('users/', UserListView.as_view(), name='user-list'),

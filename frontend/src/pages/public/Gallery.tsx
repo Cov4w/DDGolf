@@ -20,7 +20,7 @@ export default function Gallery() {
       <div className="bg-gradient-to-r from-green-800 to-green-700 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-3xl font-bold text-white">갤러리</h1>
-          <p className="text-green-100 mt-2">DDGA Gallery</p>
+          <p className="text-green-100 mt-2">Dae Deok gu Golf Association Gallery</p>
         </div>
       </div>
 

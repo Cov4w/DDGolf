@@ -8,10 +8,28 @@ import { messengerService } from '../../services/messenger';
 import { boardsService } from '../../services/boards';
 import { useAuthStore } from '../../store/authStore';
 import BannerSlider from '../../components/common/BannerSlider';
+import NoticePopup from '../../components/common/NoticePopup';
 
 export default function Home() {
   const { isAuthenticated, user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'notices' | 'boards'>('notices');
+  const [showPopup, setShowPopup] = useState(true);
+
+  const { data: popupNotices } = useQuery({
+    queryKey: ['popupNotices'],
+    queryFn: async () => {
+      try { return await noticesService.getPopupNotices(); }
+      catch { return []; }
+    },
+    retry: false,
+  });
+
+  // Filter out popups hidden today
+  const visiblePopups = (popupNotices || []).filter((p) => {
+    const hiddenData = JSON.parse(localStorage.getItem('popup_hidden') || '{}');
+    const today = new Date().toISOString().split('T')[0];
+    return hiddenData[p.id] !== today;
+  });
 
   const { data: albums } = useQuery({
     queryKey: ['publicAlbums'],
@@ -374,6 +392,11 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Popup Notices */}
+      {showPopup && visiblePopups.length > 0 && (
+        <NoticePopup popups={visiblePopups} onClose={() => setShowPopup(false)} />
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import api from './api';
-import type { Notice, PaginatedResponse, Banner, Organization, AboutContent, Executive, PublicClubItem } from '../types';
+import type { Notice, PaginatedResponse, Banner, Organization, AboutContent, Executive, PublicClubItem, History, PopupNotice } from '../types';
 
 export const noticesService = {
   // 회원용 공지사항 (로그인 필요)
@@ -151,5 +151,39 @@ export const noticesService = {
 
   moveExecutiveDown: async (id: number): Promise<void> => {
     await api.post(`/notices/executives/${id}/move_down/`);
+  },
+
+  // 연혁 API
+  getHistories: async (): Promise<History[]> => {
+    const response = await api.get('/notices/histories/');
+    return response.data;
+  },
+
+  createHistory: async (data: Partial<History>): Promise<History> => {
+    const response = await api.post('/notices/histories/', data);
+    return response.data;
+  },
+
+  updateHistory: async (id: number, data: Partial<History>): Promise<History> => {
+    const response = await api.patch(`/notices/histories/${id}/`, data);
+    return response.data;
+  },
+
+  deleteHistory: async (id: number): Promise<void> => {
+    await api.delete(`/notices/histories/${id}/`);
+  },
+
+  moveHistoryUp: async (id: number): Promise<void> => {
+    await api.post(`/notices/histories/${id}/move_up/`);
+  },
+
+  moveHistoryDown: async (id: number): Promise<void> => {
+    await api.post(`/notices/histories/${id}/move_down/`);
+  },
+
+  // 팝업 공지사항 API
+  getPopupNotices: async (): Promise<PopupNotice[]> => {
+    const response = await api.get('/notices/popup/');
+    return response.data;
   },
 };

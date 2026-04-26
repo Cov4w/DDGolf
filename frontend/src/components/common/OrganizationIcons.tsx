@@ -5,15 +5,20 @@ export default function OrganizationIcons() {
   const { data: organizations } = useQuery({
     queryKey: ['organizations'],
     queryFn: () => noticesService.getOrganizations(),
-    staleTime: 0, // 항상 새로 가져오기
+    staleTime: 0,
   });
 
   const activeOrganizations = organizations?.filter((o) => o.is_active) || [];
 
   if (activeOrganizations.length === 0) return null;
 
-  // 아이템당 약 4초, 최소 12초
-  const duration = Math.max(activeOrganizations.length * 4, 12);
+  // 한 세트가 화면을 넘길 수 있도록 충분히 복제
+  // 아이템 너비(160px) + 양쪽 마진(~40px) = ~200px
+  const copiesPerSet = Math.max(Math.ceil(2000 / (activeOrganizations.length * 200)), 1);
+  const oneSet = Array.from({ length: copiesPerSet }, () => activeOrganizations).flat();
+  // 동일한 세트 2개 → translateX(-50%)로 완벽 루프
+  const items = [...oneSet, ...oneSet];
+  const duration = Math.max(oneSet.length * 3, 12);
 
   return (
     <div className="border-b border-gray-200 bg-white">
@@ -32,9 +37,9 @@ export default function OrganizationIcons() {
           }
         `}</style>
         <div className="marquee-track" style={{ width: 'max-content' }}>
-          {[...activeOrganizations, ...activeOrganizations].map((org, idx) => (
+          {items.map((org, idx) => (
             <a
-              key={`${org.id}-${idx}`}
+              key={`o-${org.id}-${idx}`}
               href={org.link}
               target="_blank"
               rel="noopener noreferrer"

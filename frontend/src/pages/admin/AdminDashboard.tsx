@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { User, Notice, Album, ChatRoom, Message, Banner, Organization, SmsLog } from '../../types';
+import type { User, Notice, Album, ChatRoom, Message, Banner, Organization, SmsLog, History } from '../../types';
 import Loading from '../../components/common/Loading';
 import { noticesService } from '../../services/notices';
 import { smsService } from '../../services/sms';
@@ -166,7 +166,7 @@ function FileDropZone({
   );
 }
 
-type TabType = 'members' | 'about' | 'notices' | 'schedule' | 'gallery' | 'messenger' | 'banners' | 'organizations' | 'sms';
+type TabType = 'dashboard' | 'members' | 'about' | 'notices' | 'schedule' | 'gallery' | 'messenger' | 'banners' | 'organizations' | 'sms';
 
 interface ChatBan {
   id: number;
@@ -312,12 +312,21 @@ function ClubAssignSelect({
 
 export default function AdminDashboard() {
   const [searchParams] = useSearchParams();
-  const initialTab = (searchParams.get('tab') as TabType) || 'members';
+  const initialTab = (searchParams.get('tab') as TabType) || 'dashboard';
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [memberFilter, setMemberFilter] = useState<'pending' | 'all'>('pending');
   const [showNoticeForm, setShowNoticeForm] = useState(false);
   const [editingNotice, setEditingNotice] = useState<Notice | null>(null);
+  const noticeFormRef = useRef<HTMLFormElement>(null);
   const [showAlbumForm, setShowAlbumForm] = useState(false);
+  const [editingAlbum, setEditingAlbum] = useState<Album | null>(null);
+  const albumFormRef = useRef<HTMLFormElement>(null);
+  const executiveFormRef = useRef<HTMLFormElement>(null);
+  const historyFormRef = useRef<HTMLFormElement>(null);
+  const eventFormRef = useRef<HTMLFormElement>(null);
+  const bannerFormRef = useRef<HTMLFormElement>(null);
+  const orgFormRef = useRef<HTMLFormElement>(null);
+  const clubSettingsRef = useRef<HTMLDivElement>(null);
   const [showEventForm, setShowEventForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
@@ -351,6 +360,10 @@ export default function AdminDashboard() {
   const [smsSelectedIds, setSmsSelectedIds] = useState<number[]>([]);
   const [smsSending, setSmsSending] = useState(false);
   const [smsDetailLog, setSmsDetailLog] = useState<SmsLog | null>(null);
+  const [showHistoryForm, setShowHistoryForm] = useState(false);
+  const [editingHistory, setEditingHistory] = useState<History | null>(null);
+  const [popupImage, setPopupImage] = useState<File[]>([]);
+  const [isPopupChecked, setIsPopupChecked] = useState(false);
   const queryClient = useQueryClient();
 
   const PHONE_PREFIXES = [
@@ -528,6 +541,52 @@ export default function AdminDashboard() {
     enabled: activeTab === 'about',
   });
 
+  // Histories Query
+  const { data: histories } = useQuery({
+    queryKey: ['adminHistories'],
+    queryFn: () => noticesService.getHistories(),
+    enabled: activeTab === 'about',
+  });
+
+  // Dashboard Stats Query
+  const { data: dashboardStats } = useQuery({
+    queryKey: ['dashboardStats'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/accounts/users/dashboard-stats/');
+        return response.data as {
+          total_users: number;
+          pending_users: number;
+          admin_count: number;
+          instructor_count: number;
+          member_count: number;
+          club_count: number;
+          total_notices: number;
+          total_events: number;
+          upcoming_events_count: number;
+          total_sms_sent: number;
+          recent_users: { id: number; username: string; email: string; role: string; is_approved: boolean; created_at: string }[];
+          recent_notices: { id: number; title: string; created_at: string }[];
+        };
+      } catch {
+        return null;
+      }
+    },
+    enabled: activeTab === 'dashboard',
+    retry: false,
+  });
+
+  // Events for popup linking
+  const { data: allEvents } = useQuery({
+    queryKey: ['allEventsForPopup'],
+    queryFn: async () => {
+      const response = await api.get('/schedule/events/');
+      if (response.data.results) return response.data.results as Event[];
+      return response.data as Event[];
+    },
+    enabled: activeTab === 'notices',
+  });
+
   // SMS Remain Query
   const { data: smsRemain } = useQuery({
     queryKey: ['smsRemain'],
@@ -642,7 +701,7 @@ export default function AdminDashboard() {
   });
 
   const createNoticeMutation = useMutation({
-    mutationFn: (data: { title: string; content: string; visibility: string; is_important: boolean }) =>
+    mutationFn: (data: Partial<Notice>) =>
       api.post('/notices/', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminNotices'] });
@@ -652,7 +711,7 @@ export default function AdminDashboard() {
   });
 
   const updateNoticeMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { title: string; content: string; visibility: 'public' | 'member'; is_important: boolean } }) =>
+    mutationFn: ({ id, data }: { id: number; data: Partial<Notice> }) =>
       noticesService.updateNotice(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminNotices'] });
@@ -751,6 +810,27 @@ export default function AdminDashboard() {
       setShowAlbumForm(false);
       alert('앨범이 등록되었습니다.');
     },
+  });
+
+  const updateAlbumMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: FormData }) =>
+      api.patch(`/gallery/albums/${id}/`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
+      setEditingAlbum(null);
+      setCoverImage([]);
+      setAlbumPhotos([]);
+      setShowAlbumForm(false);
+      alert('앨범이 수정되었습니다.');
+    },
+  });
+
+  const deletePhotoMutation = useMutation({
+    mutationFn: ({ albumId, photoId }: { albumId: number; photoId: number }) =>
+      api.delete(`/gallery/albums/${albumId}/photos/${photoId}/`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminAlbums'] }),
   });
 
   // Ban Mutations
@@ -932,6 +1012,46 @@ export default function AdminDashboard() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminExecutives'] }),
   });
 
+  // History Mutations
+  const createHistoryMutation = useMutation({
+    mutationFn: (data: Partial<History>) => noticesService.createHistory(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminHistories'] });
+      setShowHistoryForm(false);
+      setEditingHistory(null);
+    },
+  });
+
+  const updateHistoryMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<History> }) => noticesService.updateHistory(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminHistories'] });
+      setShowHistoryForm(false);
+      setEditingHistory(null);
+    },
+  });
+
+  const deleteHistoryMutation = useMutation({
+    mutationFn: (id: number) => noticesService.deleteHistory(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminHistories'] }),
+  });
+
+  const moveHistoryUpMutation = useMutation({
+    mutationFn: (id: number) => noticesService.moveHistoryUp(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminHistories'] }),
+  });
+
+  const moveHistoryDownMutation = useMutation({
+    mutationFn: (id: number) => noticesService.moveHistoryDown(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminHistories'] }),
+  });
+
+  // SMS Delete Mutation
+  const deleteSmsLogMutation = useMutation({
+    mutationFn: (id: number) => smsService.deleteSmsLog(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['smsHistory'] }),
+  });
+
   // Set Club Icon Mutation
   const setClubIconMutation = useMutation({
     mutationFn: ({ roomId, data }: { roomId: number; data: FormData }) =>
@@ -1023,21 +1143,48 @@ export default function AdminDashboard() {
   const pendingUsers = users?.filter((u) => !u.is_approved) || [];
   const displayUsers = memberFilter === 'pending' ? pendingUsers : users || [];
 
-  const handleNoticeSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleNoticeSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
     const formData = new FormData(form);
-    const noticeData = {
+    const noticeData: Record<string, unknown> = {
       title: formData.get('title') as string,
       content: formData.get('content') as string,
       visibility: formData.get('visibility') as 'public' | 'member',
       is_important: formData.get('is_important') === 'on',
+      is_popup: formData.get('is_popup') === 'on',
+      popup_content: formData.get('popup_content') as string || '',
+      linked_event: formData.get('linked_event') ? Number(formData.get('linked_event')) : null,
     };
-    if (editingNotice) {
-      updateNoticeMutation.mutate({ id: editingNotice.id, data: noticeData });
+
+    // If popup_image is selected, use multipart form data
+    if (popupImage.length > 0) {
+      const multipartData = new FormData();
+      Object.entries(noticeData).forEach(([key, val]) => {
+        if (val !== null && val !== undefined) multipartData.append(key, String(val));
+      });
+      multipartData.append('popup_image', popupImage[0]);
+      try {
+        if (editingNotice) {
+          await api.patch(`/notices/${editingNotice.id}/`, multipartData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        } else {
+          await api.post('/notices/', multipartData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        }
+        queryClient.invalidateQueries({ queryKey: ['adminNotices'] });
+        setShowNoticeForm(false);
+        setEditingNotice(null);
+        setPopupImage([]);
+      } catch {
+        alert('저장 중 오류가 발생했습니다.');
+      }
     } else {
-      createNoticeMutation.mutate(noticeData);
+      if (editingNotice) {
+        updateNoticeMutation.mutate({ id: editingNotice.id, data: noticeData as Partial<Notice> });
+      } else {
+        createNoticeMutation.mutate(noticeData as Partial<Notice>);
+      }
     }
+    setPopupImage([]);
   };
 
   const handleEventSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -1082,7 +1229,11 @@ export default function AdminDashboard() {
       formData.append('photos', photo);
     });
 
-    createAlbumMutation.mutate(formData);
+    if (editingAlbum) {
+      updateAlbumMutation.mutate({ id: editingAlbum.id, data: formData });
+    } else {
+      createAlbumMutation.mutate(formData);
+    }
   };
 
   return (
@@ -1093,6 +1244,7 @@ export default function AdminDashboard() {
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex flex-wrap gap-x-4 gap-y-1">
           {[
+            { key: 'dashboard', label: '대시보드', badge: 0 },
             { key: 'members', label: '회원 관리', badge: adminNoti?.pending_users || 0 },
             { key: 'about', label: '협회소개 관리', badge: 0 },
             { key: 'notices', label: '공지사항 관리', badge: 0 },
@@ -1122,6 +1274,135 @@ export default function AdminDashboard() {
           ))}
         </nav>
       </div>
+
+      {/* Dashboard Tab */}
+      {activeTab === 'dashboard' && (
+        <div className="space-y-6">
+          {!dashboardStats && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-700">
+              대시보드 통계를 불러올 수 없습니다. 백엔드 서버를 업데이트해 주세요.
+            </div>
+          )}
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {[
+              { label: '전체 회원', value: dashboardStats?.total_users ?? '-', color: 'bg-blue-500', icon: '👥' },
+              { label: '승인 대기', value: dashboardStats?.pending_users ?? '-', color: 'bg-red-500', icon: '⏳' },
+              { label: '클럽 수', value: dashboardStats?.club_count ?? '-', color: 'bg-green-500', icon: '⛳' },
+              { label: '클럽장', value: dashboardStats?.instructor_count ?? '-', color: 'bg-purple-500', icon: '🏅' },
+              { label: '관리자', value: dashboardStats?.admin_count ?? '-', color: 'bg-yellow-500', icon: '🔑' },
+              { label: '일반 회원', value: dashboardStats?.member_count ?? '-', color: 'bg-teal-500', icon: '👤' },
+              { label: '공지사항', value: dashboardStats?.total_notices ?? '-', color: 'bg-indigo-500', icon: '📋' },
+              { label: '다가오는 일정', value: dashboardStats?.upcoming_events_count ?? '-', color: 'bg-orange-500', icon: '📅' },
+              { label: 'SMS 발송', value: dashboardStats?.total_sms_sent ?? '-', color: 'bg-pink-500', icon: '💬' },
+              { label: '전체 일정', value: dashboardStats?.total_events ?? '-', color: 'bg-gray-500', icon: '🗓️' },
+            ].map((stat) => (
+              <div key={stat.label} className="bg-white rounded-lg shadow p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-2xl">{stat.icon}</span>
+                  <span className={`${stat.color} text-white text-xs px-2 py-0.5 rounded-full`}>{stat.label}</span>
+                </div>
+                <div className="text-3xl font-bold text-gray-800">{stat.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Charts */}
+          {dashboardStats && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Member Distribution Bar Chart */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">회원 구성</h3>
+                <div className="space-y-3">
+                  {[
+                    { label: '관리자', count: dashboardStats.admin_count, color: 'bg-yellow-500' },
+                    { label: '클럽장', count: dashboardStats.instructor_count, color: 'bg-purple-500' },
+                    { label: '일반회원', count: dashboardStats.member_count, color: 'bg-teal-500' },
+                    { label: '대기', count: dashboardStats.pending_users, color: 'bg-red-400' },
+                  ].map((item) => {
+                    const max = dashboardStats.total_users || 1;
+                    const pct = Math.round((item.count / max) * 100);
+                    return (
+                      <div key={item.label}>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">{item.label}</span>
+                          <span className="font-medium">{item.count}명 ({pct}%)</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-4">
+                          <div className={`${item.color} h-4 rounded-full transition-all`} style={{ width: `${Math.max(pct, 2)}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Donut Chart */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">운영 현황</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { label: '클럽', value: dashboardStats.club_count, color: 'text-green-600', bg: 'bg-green-100' },
+                    { label: '공지사항', value: dashboardStats.total_notices, color: 'text-indigo-600', bg: 'bg-indigo-100' },
+                    { label: '전체 일정', value: dashboardStats.total_events, color: 'text-orange-600', bg: 'bg-orange-100' },
+                    { label: 'SMS 발송', value: dashboardStats.total_sms_sent, color: 'text-pink-600', bg: 'bg-pink-100' },
+                  ].map((item) => (
+                    <div key={item.label} className={`${item.bg} rounded-lg p-4 text-center`}>
+                      <div className={`text-3xl font-bold ${item.color}`}>{item.value}</div>
+                      <div className="text-sm text-gray-600 mt-1">{item.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Recent Data */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Recent Users */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-4 border-b">
+                <h3 className="font-semibold">최근 가입자</h3>
+              </div>
+              <div className="divide-y">
+                {dashboardStats?.recent_users?.map((u) => (
+                  <div key={u.id} className="p-3 flex justify-between items-center text-sm">
+                    <div>
+                      <span className="font-medium">{u.username}</span>
+                      <span className="text-gray-400 ml-2 text-xs">{u.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-xs ${u.is_approved ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {u.is_approved ? '승인' : '대기'}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(u.created_at).toLocaleDateString('ko-KR')}
+                      </span>
+                    </div>
+                  </div>
+                )) || <div className="p-4 text-center text-gray-500 text-sm">데이터 없음</div>}
+              </div>
+            </div>
+
+            {/* Recent Notices */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-4 border-b">
+                <h3 className="font-semibold">최근 공지사항</h3>
+              </div>
+              <div className="divide-y">
+                {dashboardStats?.recent_notices?.map((n) => (
+                  <div key={n.id} className="p-3 flex justify-between items-center text-sm">
+                    <span className="font-medium truncate flex-1 mr-2">{n.title}</span>
+                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                      {new Date(n.created_at).toLocaleDateString('ko-KR')}
+                    </span>
+                  </div>
+                )) || <div className="p-4 text-center text-gray-500 text-sm">데이터 없음</div>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Members Tab */}
       {activeTab === 'members' && (
@@ -1449,6 +1730,7 @@ export default function AdminDashboard() {
 
             {showExecutiveForm && (
               <form
+                ref={executiveFormRef}
                 onSubmit={(e) => {
                   e.preventDefault();
                   const form = e.currentTarget;
@@ -1575,6 +1857,7 @@ export default function AdminDashboard() {
                             setExecutivePhonePrefix('042');
                             setExecutivePhoneNumber('');
                           }
+                          setTimeout(() => executiveFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
                         }}
                         className="px-2 py-1 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
                       >
@@ -1598,6 +1881,138 @@ export default function AdminDashboard() {
               )}
             </div>
           </div>
+
+          {/* 연혁 관리 */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">연혁 관리</h2>
+              <button
+                onClick={() => {
+                  setEditingHistory(null);
+                  setShowHistoryForm(!showHistoryForm);
+                }}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
+              >
+                {showHistoryForm ? '취소' : '연혁 추가'}
+              </button>
+            </div>
+
+            {showHistoryForm && (
+              <form
+                ref={historyFormRef}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const year = parseInt(form.querySelector<HTMLInputElement>('[name="history_year"]')?.value || '2024');
+                  const content = form.querySelector<HTMLInputElement>('[name="history_content"]')?.value || '';
+                  const detail = form.querySelector<HTMLTextAreaElement>('[name="history_detail"]')?.value || '';
+                  if (editingHistory) {
+                    updateHistoryMutation.mutate({ id: editingHistory.id, data: { year, content, detail } });
+                  } else {
+                    createHistoryMutation.mutate({ year, content, detail });
+                  }
+                }}
+                className="p-4 border-b border-gray-200 bg-gray-50"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">연도 *</label>
+                    <input
+                      type="number"
+                      name="history_year"
+                      required
+                      defaultValue={editingHistory?.year || new Date().getFullYear()}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div className="md:col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">내용 *</label>
+                    <input
+                      type="text"
+                      name="history_content"
+                      required
+                      defaultValue={editingHistory?.content || ''}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                      placeholder="연혁 내용을 입력하세요."
+                    />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">상세 내용</label>
+                  <textarea
+                    name="history_detail"
+                    rows={3}
+                    defaultValue={editingHistory?.detail || ''}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    placeholder="상세 내용을 입력하세요. (선택사항)"
+                  />
+                </div>
+                <div className="mt-4">
+                  <button
+                    type="submit"
+                    disabled={createHistoryMutation.isPending || updateHistoryMutation.isPending}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {(createHistoryMutation.isPending || updateHistoryMutation.isPending) ? '저장 중...' : (editingHistory ? '수정' : '추가')}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="divide-y divide-gray-200">
+              {histories && histories.length > 0 ? (
+                histories.map((item: History) => (
+                  <div key={item.id} className="p-4 flex items-center gap-4">
+                    <div className="flex-shrink-0 bg-green-100 text-green-800 font-bold px-3 py-1 rounded text-sm">
+                      {item.year}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-700">{item.content}</p>
+                      {item.detail && (
+                        <p className="text-xs text-gray-500 mt-1">{item.detail}</p>
+                      )}
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => moveHistoryUpMutation.mutate(item.id)}
+                        className="px-2 py-1 text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 rounded"
+                      >
+                        &uarr;
+                      </button>
+                      <button
+                        onClick={() => moveHistoryDownMutation.mutate(item.id)}
+                        className="px-2 py-1 text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 rounded"
+                      >
+                        &darr;
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingHistory(item);
+                          setShowHistoryForm(true);
+                          setTimeout(() => historyFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+                        }}
+                        className="px-2 py-1 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`"${item.year} - ${item.content}" 연혁을 삭제하시겠습니까?`)) {
+                            deleteHistoryMutation.mutate(item.id);
+                          }
+                        }}
+                        className="px-2 py-1 text-xs bg-red-100 text-red-700 hover:bg-red-200 rounded"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-gray-500">등록된 연혁이 없습니다.</div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1609,7 +2024,12 @@ export default function AdminDashboard() {
             <button
               onClick={() => {
                 setShowNoticeForm(!showNoticeForm);
-                if (showNoticeForm) setEditingNotice(null);
+                if (showNoticeForm) {
+                  setEditingNotice(null);
+                  setIsPopupChecked(false);
+                } else {
+                  setIsPopupChecked(false);
+                }
               }}
               className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
             >
@@ -1618,7 +2038,7 @@ export default function AdminDashboard() {
           </div>
 
           {showNoticeForm && (
-            <form key={editingNotice?.id || 'new'} onSubmit={handleNoticeSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
+            <form ref={noticeFormRef} key={editingNotice?.id || 'new'} onSubmit={handleNoticeSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
@@ -1652,15 +2072,63 @@ export default function AdminDashboard() {
                     <option value="club">클럽 전용</option>
                   </select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    name="is_important"
-                    id="is_important"
-                    defaultChecked={editingNotice?.is_important || false}
-                    className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="is_important"
+                      id="is_important"
+                      defaultChecked={editingNotice?.is_important || false}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="is_important" className="text-sm text-gray-700">중요 공지</label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="is_popup"
+                      id="is_popup"
+                      defaultChecked={editingNotice?.is_popup || false}
+                      onChange={(e) => setIsPopupChecked(e.target.checked)}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="is_popup" className="text-sm text-gray-700">팝업 표시</label>
+                  </div>
+                  <div className={`flex items-center gap-2 ${!isPopupChecked ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <label htmlFor="linked_event" className="text-sm text-gray-700 whitespace-nowrap">경기일정 연결:</label>
+                    <select
+                      name="linked_event"
+                      id="linked_event"
+                      defaultValue={editingNotice?.linked_event || ''}
+                      disabled={!isPopupChecked}
+                      className="px-2 py-1 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                    >
+                      <option value="">없음 (공지사항으로 이동)</option>
+                      {allEvents?.map((evt) => (
+                        <option key={evt.id} value={evt.id}>{evt.title} ({new Date(evt.start_date).toLocaleDateString('ko-KR')})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className={!isPopupChecked ? 'opacity-40 pointer-events-none' : ''}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">팝업 문구 (선택)</label>
+                  <textarea
+                    name="popup_content"
+                    rows={2}
+                    defaultValue={editingNotice?.popup_content || ''}
+                    disabled={!isPopupChecked}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    placeholder="팝업에 표시할 문구를 입력하세요."
                   />
-                  <label htmlFor="is_important" className="text-sm text-gray-700">중요 공지</label>
+                </div>
+                <div className={!isPopupChecked ? 'opacity-40 pointer-events-none' : ''}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">팝업 이미지 (선택)</label>
+                  <FileDropZone
+                    label="팝업 이미지"
+                    name="popup_image"
+                    files={popupImage}
+                    onFilesChange={setPopupImage}
+                  />
                 </div>
                 <button
                   type="submit"
@@ -1709,7 +2177,9 @@ export default function AdminDashboard() {
                     <button
                       onClick={() => {
                         setEditingNotice(notice);
+                        setIsPopupChecked(!!notice.is_popup);
                         setShowNoticeForm(true);
+                        setTimeout(() => noticeFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
                       }}
                       className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700 hover:bg-blue-200"
                     >
@@ -1760,7 +2230,7 @@ export default function AdminDashboard() {
           </div>
 
           {(showEventForm || editingEvent) && (
-            <form onSubmit={handleEventSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
+            <form ref={eventFormRef} onSubmit={handleEventSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
@@ -1947,6 +2417,7 @@ export default function AdminDashboard() {
                         onClick={() => {
                           setShowEventForm(false);
                           setEditingEvent(event);
+                          setTimeout(() => eventFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
                         }}
                         className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700 hover:bg-blue-200"
                       >
@@ -2093,20 +2564,23 @@ export default function AdminDashboard() {
             <h2 className="text-lg font-semibold">갤러리 앨범 목록</h2>
             <button
               onClick={() => {
-                if (showAlbumForm) {
+                if (showAlbumForm && !editingAlbum) {
                   setCoverImage([]);
                   setAlbumPhotos([]);
                 }
+                setEditingAlbum(null);
+                setCoverImage([]);
+                setAlbumPhotos([]);
                 setShowAlbumForm(!showAlbumForm);
               }}
               className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
             >
-              {showAlbumForm ? '취소' : '새 앨범'}
+              {showAlbumForm && !editingAlbum ? '취소' : '새 앨범'}
             </button>
           </div>
 
-          {showAlbumForm && (
-            <form onSubmit={handleAlbumSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
+          {(showAlbumForm || editingAlbum) && (
+            <form ref={albumFormRef} key={editingAlbum?.id || 'new'} onSubmit={handleAlbumSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
@@ -2114,6 +2588,7 @@ export default function AdminDashboard() {
                     type="text"
                     name="title"
                     required
+                    defaultValue={editingAlbum?.title || ''}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
@@ -2122,6 +2597,7 @@ export default function AdminDashboard() {
                   <textarea
                     name="description"
                     rows={2}
+                    defaultValue={editingAlbum?.description || ''}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
@@ -2129,21 +2605,51 @@ export default function AdminDashboard() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">앨범 유형</label>
                   <select
                     name="album_type"
+                    defaultValue={editingAlbum?.album_type || 'public'}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
                   >
                     <option value="public">공용 갤러리</option>
                     <option value="member">회원 전용 갤러리</option>
                   </select>
                 </div>
+                {editingAlbum?.cover_image && coverImage.length === 0 && (
+                  <div>
+                    <span className="block text-sm font-medium text-gray-700 mb-1">현재 커버 이미지</span>
+                    <img src={editingAlbum.cover_image} alt="현재 커버" className="w-32 h-32 object-cover rounded border" />
+                  </div>
+                )}
                 <FileDropZone
-                  label="커버 이미지"
+                  label={editingAlbum?.cover_image ? '새 커버 이미지 (변경 시)' : '커버 이미지'}
                   name="cover_image"
                   multiple={false}
                   files={coverImage}
                   onFilesChange={setCoverImage}
                 />
+                {editingAlbum?.photos && editingAlbum.photos.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">기존 사진</label>
+                    <div className="flex flex-wrap gap-2">
+                      {editingAlbum.photos.map((photo) => (
+                        <div key={photo.id} className="relative group">
+                          <img src={photo.image} alt="" className="w-20 h-20 object-cover rounded border" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm('이 사진을 삭제하시겠습니까?')) {
+                                deletePhotoMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
+                              }
+                            }}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            X
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <FileDropZone
-                  label="사진 (여러장 선택 가능)"
+                  label={editingAlbum ? '새 사진 추가 (여러장 선택 가능)' : '사진 (여러장 선택 가능)'}
                   name="photos"
                   multiple={true}
                   files={albumPhotos}
@@ -2154,18 +2660,34 @@ export default function AdminDashboard() {
                     type="checkbox"
                     name="is_public"
                     id="is_public"
-                    defaultChecked
+                    defaultChecked={editingAlbum ? editingAlbum.is_public : true}
                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
                   />
                   <label htmlFor="is_public" className="text-sm text-gray-700">공개</label>
                 </div>
-                <button
-                  type="submit"
-                  disabled={createAlbumMutation.isPending}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
-                >
-                  {createAlbumMutation.isPending ? '저장 중...' : '저장'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={createAlbumMutation.isPending || updateAlbumMutation.isPending}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {(createAlbumMutation.isPending || updateAlbumMutation.isPending) ? '저장 중...' : (editingAlbum ? '수정' : '저장')}
+                  </button>
+                  {editingAlbum && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingAlbum(null);
+                        setShowAlbumForm(false);
+                        setCoverImage([]);
+                        setAlbumPhotos([]);
+                      }}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-400"
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
               </div>
             </form>
           )}
@@ -2200,6 +2722,18 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingAlbum(album);
+                        setCoverImage([]);
+                        setAlbumPhotos([]);
+                        setShowAlbumForm(false);
+                        setTimeout(() => albumFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+                      }}
+                      className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    >
+                      수정
+                    </button>
                     <button
                       onClick={() => toggleAlbumHiddenMutation.mutate(album.id)}
                       className={`px-3 py-1 rounded text-sm ${
@@ -2301,7 +2835,12 @@ export default function AdminDashboard() {
                   >
                     <div className="flex justify-between items-center">
                       <button
-                        onClick={() => setSelectedRoom(selectedRoom === room.id ? null : room.id)}
+                        onClick={() => {
+                          setSelectedRoom(selectedRoom === room.id ? null : room.id);
+                          if (selectedRoom !== room.id) {
+                            setTimeout(() => clubSettingsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+                          }
+                        }}
                         className="flex-1 text-left flex items-center gap-3"
                       >
                         {room.icon ? (
@@ -2406,7 +2945,7 @@ export default function AdminDashboard() {
                 const currentRoom = chatRooms?.find((r) => r.id === selectedRoom);
                 if (!currentRoom) return null;
                 return (
-                  <div className="lg:col-span-2 bg-white rounded-lg shadow">
+                  <div ref={clubSettingsRef} className="lg:col-span-2 bg-white rounded-lg shadow">
                     <div className="p-4 border-b border-gray-200">
                       <h2 className="text-lg font-semibold">클럽 설정 - {currentRoom.name}</h2>
                     </div>
@@ -2605,7 +3144,7 @@ export default function AdminDashboard() {
           </div>
 
           {(showBannerForm || editingBanner) && (
-            <form onSubmit={handleBannerSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
+            <form ref={bannerFormRef} onSubmit={handleBannerSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
               <div className="space-y-4">
                 <div>
                   <FileDropZone
@@ -2747,6 +3286,7 @@ export default function AdminDashboard() {
                         setBannerPhonePrefix(parsed.prefix);
                         setBannerPhoneNumber(parsed.suffix);
                         setBannerImage([]);
+                        setTimeout(() => bannerFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
                       }}
                       className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700 hover:bg-blue-200"
                     >
@@ -2806,7 +3346,7 @@ export default function AdminDashboard() {
           </div>
 
           {(showOrgForm || editingOrg) && (
-            <form onSubmit={handleOrgSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
+            <form ref={orgFormRef} onSubmit={handleOrgSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">기관명</label>
@@ -2918,6 +3458,7 @@ export default function AdminDashboard() {
                         setShowOrgForm(false);
                         setEditingOrg(org);
                         setOrgLogo([]);
+                        setTimeout(() => orgFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
                       }}
                       className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700 hover:bg-blue-200"
                     >
@@ -3168,12 +3709,24 @@ export default function AdminDashboard() {
                         <td className="px-3 py-2">{log.recipients_count}명</td>
                         <td className="px-3 py-2 max-w-xs truncate">{log.message}</td>
                         <td className="px-3 py-2">
-                          <button
-                            onClick={() => setSmsDetailLog(log)}
-                            className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                          >
-                            상세
-                          </button>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => setSmsDetailLog(log)}
+                              className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                            >
+                              상세
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm('이 발송 내역을 삭제하시겠습니까?')) {
+                                  deleteSmsLogMutation.mutate(log.id);
+                                }
+                              }}
+                              className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                            >
+                              삭제
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

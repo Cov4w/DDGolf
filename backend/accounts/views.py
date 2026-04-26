@@ -474,6 +474,55 @@ class UserAssignClubView(APIView):
             })
 
 
+class DashboardStatsView(APIView):
+    """관리자 대시보드 통계 API"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        from notices.models import Notice
+        from schedule.models import Event
+        from messenger.models import ChatRoom
+        from sms.models import SmsLog
+        from django.utils import timezone
+
+        total_users = User.objects.count()
+        pending_users = User.objects.filter(is_approved=False).count()
+        admin_count = User.objects.filter(role='admin').count()
+        instructor_count = User.objects.filter(role='instructor').count()
+        member_count = User.objects.filter(role='member').count()
+        club_count = ChatRoom.objects.filter(is_public=False).count()
+        total_notices = Notice.objects.count()
+        total_events = Event.objects.count()
+        upcoming_events_count = Event.objects.filter(start_date__gte=timezone.now()).count()
+        total_sms_sent = SmsLog.objects.count()
+
+        recent_users = list(
+            User.objects.order_by('-created_at')[:5].values(
+                'id', 'username', 'email', 'role', 'is_approved', 'created_at'
+            )
+        )
+        recent_notices = list(
+            Notice.objects.order_by('-created_at')[:5].values(
+                'id', 'title', 'created_at'
+            )
+        )
+
+        return Response({
+            'total_users': total_users,
+            'pending_users': pending_users,
+            'admin_count': admin_count,
+            'instructor_count': instructor_count,
+            'member_count': member_count,
+            'club_count': club_count,
+            'total_notices': total_notices,
+            'total_events': total_events,
+            'upcoming_events_count': upcoming_events_count,
+            'total_sms_sent': total_sms_sent,
+            'recent_users': recent_users,
+            'recent_notices': recent_notices,
+        })
+
+
 class VerifyPasswordView(APIView):
     """비밀번호 확인 API"""
     permission_classes = [permissions.IsAuthenticated]

@@ -43,22 +43,9 @@ class AlbumDetailSerializer(serializers.ModelSerializer):
 
 
 class AlbumCreateSerializer(serializers.ModelSerializer):
-    photos = serializers.ListField(
-        child=serializers.ImageField(),
-        required=False,
-        write_only=True
-    )
-
     class Meta:
         model = Album
-        fields = ['title', 'description', 'cover_image', 'album_type', 'is_public', 'photos']
-
-    def create(self, validated_data):
-        photos_data = validated_data.pop('photos', [])
-        album = Album.objects.create(**validated_data)
-        for photo in photos_data:
-            Photo.objects.create(album=album, image=photo)
-        return album
+        fields = ['title', 'description', 'cover_image', 'album_type', 'is_public']
 
 
 class AlbumAdminSerializer(serializers.ModelSerializer):

@@ -866,7 +866,6 @@ export default function AdminDashboard() {
       if (editingAlbum && editingAlbum.id === variables.albumId) {
         setEditingAlbum({ ...editingAlbum, cover_photo_id: variables.photoId });
       }
-      alert('대표 이미지가 변경되었습니다.');
     },
   });
 

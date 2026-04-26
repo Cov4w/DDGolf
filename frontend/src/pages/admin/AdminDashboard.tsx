@@ -2921,6 +2921,15 @@ export default function AdminDashboard() {
                         </div>
                       </button>
                       <div className="flex gap-1 items-center flex-shrink-0">
+                        <button
+                          onClick={() => {
+                            setSelectedRoom(room.id);
+                            setTimeout(() => clubSettingsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+                          }}
+                          className="px-2 py-1 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
+                        >
+                          수정
+                        </button>
                         {room.is_public ? (
                           <button
                             onClick={() => {

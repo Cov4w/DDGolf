@@ -861,9 +861,12 @@ export default function AdminDashboard() {
   const setCoverMutation = useMutation({
     mutationFn: ({ albumId, photoId }: { albumId: number; photoId: number }) =>
       api.post(`/gallery/albums/${albumId}/set_cover/${photoId}/`),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
-      alert('대표 이미지가 변���되었습니다.');
+      if (editingAlbum && editingAlbum.id === variables.albumId) {
+        setEditingAlbum({ ...editingAlbum, cover_photo_id: variables.photoId });
+      }
+      alert('대표 이미지가 변경되었습니다.');
     },
   });
 
@@ -2700,8 +2703,13 @@ export default function AdminDashboard() {
                   multiple={true}
                   files={albumPhotos}
                   onFilesChange={(files) => {
+                    if (!editingAlbum) {
+                      // 파일 삭제 시 coverIndex 보정
+                      if (files.length <= albumCoverIndex) {
+                        setAlbumCoverIndex(Math.max(0, files.length - 1));
+                      }
+                    }
                     setAlbumPhotos(files);
-                    if (!editingAlbum) setAlbumCoverIndex(0);
                   }}
                   {...(!editingAlbum ? { coverIndex: albumCoverIndex, onCoverSelect: setAlbumCoverIndex } : {})}
                 />

@@ -47,7 +47,7 @@ class Event(models.Model):
     class Meta:
         verbose_name = '일정'
         verbose_name_plural = '일정 목록'
-        ordering = ['start_date']
+        ordering = ['-start_date']
 
     def __str__(self):
         return f'{self.title} ({self.start_date.strftime("%Y-%m-%d")})'

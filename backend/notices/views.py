@@ -1,4 +1,4 @@
-from django.db.models import F, Q
+from django.db.models import F, Max, Q
 from rest_framework import serializers, viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -290,6 +290,10 @@ class HistoryViewSet(viewsets.ModelViewSet):
         if self.action in ['list', 'retrieve']:
             return [permissions.AllowAny()]
         return [permissions.IsAdminUser()]
+
+    def perform_create(self, serializer):
+        max_order = History.objects.aggregate(max_order=Max('order'))['max_order'] or 0
+        serializer.save(order=max_order + 1)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     def move_up(self, request, pk=None):

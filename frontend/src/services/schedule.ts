@@ -52,4 +52,9 @@ export const scheduleService = {
     const response = await api.get(`/schedule/public/events/${id}/`);
     return response.data;
   },
+
+  getPopupEvents: async (): Promise<Event[]> => {
+    const response = await api.get('/schedule/events/popup_events/');
+    return response.data;
+  },
 };

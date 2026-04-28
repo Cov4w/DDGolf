@@ -41,6 +41,7 @@ class Event(models.Model):
         choices=Visibility.choices,
         default=Visibility.MEMBER
     )
+    is_popup = models.BooleanField('팝업 표시', default=False)
     created_at = models.DateTimeField('작성일', auto_now_add=True)
     updated_at = models.DateTimeField('수정일', auto_now=True)
 

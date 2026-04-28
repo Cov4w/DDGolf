@@ -150,6 +150,7 @@ export interface Event {
   is_participating?: boolean;
   visibility: 'public' | 'member';
   visibility_display?: string;
+  is_popup?: boolean;
   created_by: User;
   created_at: string;
   updated_at: string;
@@ -254,6 +255,33 @@ export interface SmsLog {
   recipients_count: number;
   recipients_info: { id: number; username: string; phone: string }[];
   aligo_response: Record<string, unknown>;
+  created_at: string;
+}
+
+// 서식다운로드
+export interface DocumentCategory {
+  id: number;
+  name: string;
+  order: number;
+  documents: Document[];
+}
+
+export interface DocumentFile {
+  id: number;
+  file: string;
+  original_name: string;
+  order: number;
+}
+
+export interface Document {
+  id: number;
+  category: number;
+  title: string;
+  description: string;
+  thumbnail_id: number | null;
+  files: DocumentFile[];
+  download_count: number;
+  order: number;
   created_at: string;
 }
 

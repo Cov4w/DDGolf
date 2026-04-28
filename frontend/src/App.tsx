@@ -14,6 +14,7 @@ import Gallery from './pages/public/Gallery';
 import GalleryDetail from './pages/public/GalleryDetail';
 import PublicNotices from './pages/public/Notices';
 import PublicNoticeDetail from './pages/public/NoticeDetail';
+import Documents from './pages/public/Documents';
 import Privacy from './pages/public/Privacy';
 import Terms from './pages/public/Terms';
 import EmailPolicy from './pages/public/EmailPolicy';
@@ -64,6 +65,7 @@ function AppContent() {
         <Route path="gallery/:id" element={<GalleryDetail />} />
         <Route path="public-notices" element={<PublicNotices />} />
         <Route path="public-notices/:id" element={<PublicNoticeDetail />} />
+        <Route path="documents" element={<Documents />} />
         <Route path="schedule" element={<Schedule />} />
         <Route path="schedule/:id" element={<ScheduleDetail />} />
         <Route path="privacy" element={<Privacy />} />

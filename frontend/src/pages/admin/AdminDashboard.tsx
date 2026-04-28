@@ -23,6 +23,7 @@ interface Event {
   pending_participant_count: number;
   visibility: 'public' | 'member';
   visibility_display?: string;
+  is_popup?: boolean;
   created_by: User;
   created_at: string;
 }
@@ -30,16 +31,16 @@ interface Event {
 // 드래그 앤 드랍 파일 업로드 컴포넌트
 function FileDropZone({
   label,
-  name,
   multiple = false,
+  accept = 'image/*',
   files,
   onFilesChange,
   coverIndex,
   onCoverSelect,
 }: {
   label: string;
-  name: string;
   multiple?: boolean;
+  accept?: string;
   files: File[];
   onFilesChange: (files: File[]) => void;
   coverIndex?: number;
@@ -66,9 +67,9 @@ function FileDropZone({
       e.stopPropagation();
       setIsDragging(false);
 
-      const droppedFiles = Array.from(e.dataTransfer.files).filter((file) =>
-        file.type.startsWith('image/')
-      );
+      const droppedFiles = accept === 'image/*'
+        ? Array.from(e.dataTransfer.files).filter((file) => file.type.startsWith('image/'))
+        : Array.from(e.dataTransfer.files);
 
       if (droppedFiles.length > 0) {
         if (multiple) {
@@ -78,7 +79,7 @@ function FileDropZone({
         }
       }
     },
-    [files, multiple, onFilesChange]
+    [files, multiple, onFilesChange, accept]
   );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,7 +99,7 @@ function FileDropZone({
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       <div
-        onClick={() => inputRef.current?.click()}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); inputRef.current?.click(); }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -111,8 +112,7 @@ function FileDropZone({
         <input
           ref={inputRef}
           type="file"
-          name={name}
-          accept="image/*"
+          accept={accept}
           multiple={multiple}
           onChange={handleFileSelect}
           className="hidden"
@@ -134,7 +134,9 @@ function FileDropZone({
           <span className="font-medium text-green-600">클릭하여 파일 선택</span> 또는 드래그 앤 드랍
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          {multiple ? '여러 이미지 선택 가능 (PNG, JPG, GIF)' : '이미지 파일 (PNG, JPG, GIF)'}
+          {accept === 'image/*'
+            ? (multiple ? '여러 이미지 선택 가능 (PNG, JPG, GIF)' : '이미지 파일 (PNG, JPG, GIF)')
+            : (multiple ? '여러 파일 선택 가능' : '파일 선택')}
         </p>
       </div>
 
@@ -148,23 +150,31 @@ function FileDropZone({
           <div className="flex flex-wrap gap-2">
             {files.map((file, index) => {
               const isCover = onCoverSelect && coverIndex === index;
+              const isImage = file.type.startsWith('image/');
+              const canSelectCover = onCoverSelect && isImage;
               return (
                 <div key={index} className="relative group">
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    className={`w-20 h-20 object-cover rounded-lg ${
-                      isCover
-                        ? 'ring-3 ring-green-500 border-2 border-green-500'
-                        : 'border border-gray-200'
-                    } ${onCoverSelect ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : ''}`}
-                    onClick={(e) => {
-                      if (onCoverSelect) {
-                        e.stopPropagation();
-                        onCoverSelect(index);
-                      }
-                    }}
-                  />
+                  {isImage ? (
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={file.name}
+                      className={`w-20 h-20 object-contain rounded-lg bg-gray-50 ${
+                        isCover
+                          ? 'ring-3 ring-green-500 border-2 border-green-500'
+                          : 'border border-gray-200'
+                      } ${canSelectCover ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : ''}`}
+                      onClick={(e) => {
+                        if (canSelectCover) {
+                          e.stopPropagation();
+                          onCoverSelect(index);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-lg border border-gray-200 bg-gray-50 flex flex-col items-center justify-center">
+                      <span className="text-lg font-bold text-gray-400">{file.name.split('.').pop()?.toUpperCase() || 'FILE'}</span>
+                    </div>
+                  )}
                   {isCover && (
                     <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
                       대표
@@ -191,7 +201,7 @@ function FileDropZone({
   );
 }
 
-type TabType = 'dashboard' | 'members' | 'about' | 'notices' | 'schedule' | 'gallery' | 'messenger' | 'banners' | 'organizations' | 'sms';
+type TabType = 'dashboard' | 'members' | 'about' | 'notices' | 'schedule' | 'gallery' | 'messenger' | 'banners' | 'organizations' | 'documents' | 'sms';
 
 interface ChatBan {
   id: number;
@@ -389,6 +399,13 @@ export default function AdminDashboard() {
   const [editingHistory, setEditingHistory] = useState<History | null>(null);
   const [popupImage, setPopupImage] = useState<File[]>([]);
   const [isPopupChecked, setIsPopupChecked] = useState(false);
+  // Documents state
+  const [showDocCategoryForm, setShowDocCategoryForm] = useState(false);
+  const [editingDocCategory, setEditingDocCategory] = useState<{ id: number; name: string; order: number } | null>(null);
+  const [showDocForm, setShowDocForm] = useState(false);
+  const [editingDoc, setEditingDoc] = useState<{ id: number; category: number; title: string; description: string; thumbnail_id: number | null; files: { id: number; file: string; original_name: string; order: number }[]; order: number } | null>(null);
+  const [docFiles, setDocFiles] = useState<File[]>([]);
+  const [docThumbnailIndex, setDocThumbnailIndex] = useState<number | undefined>(undefined);
   const queryClient = useQueryClient();
 
   const PHONE_PREFIXES = [
@@ -641,6 +658,91 @@ export default function AdminDashboard() {
     }
   }, [activeTab, smsClubFilter, smsFilteredUsers.length]);
 
+  // Documents Queries
+  const { data: docCategories, isLoading: docCategoriesLoading } = useQuery({
+    queryKey: ['adminDocCategories'],
+    queryFn: async () => {
+      const response = await api.get('/documents/categories/');
+      return response.data as { id: number; name: string; order: number; documents: { id: number; category: number; title: string; description: string; thumbnail_id: number | null; files: { id: number; file: string; original_name: string; order: number }[]; download_count: number; order: number; created_at: string }[] }[];
+    },
+    enabled: activeTab === 'documents',
+  });
+
+  const createDocCategoryMutation = useMutation({
+    mutationFn: (data: { name: string }) => api.post('/documents/categories/', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminDocCategories'] });
+      setShowDocCategoryForm(false);
+      setEditingDocCategory(null);
+      alert('카테고리가 등록되었습니다.');
+    },
+  });
+
+  const updateDocCategoryMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { name: string } }) => api.patch(`/documents/categories/${id}/`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminDocCategories'] });
+      setEditingDocCategory(null);
+      alert('카테고리가 수정되었습니다.');
+    },
+  });
+
+  const deleteDocCategoryMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/documents/categories/${id}/`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminDocCategories'] }),
+  });
+
+  const createDocMutation = useMutation({
+    mutationFn: (data: FormData) => api.post('/documents/items/', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    onSuccess: async (response) => {
+      // 대표이미지 지정
+      const doc = response.data;
+      if (docThumbnailIndex !== undefined && doc.files && doc.files[docThumbnailIndex]) {
+        await api.post(`/documents/items/${doc.id}/set_thumbnail/`, { file_id: doc.files[docThumbnailIndex].id });
+      }
+      queryClient.invalidateQueries({ queryKey: ['adminDocCategories'] });
+      setShowDocForm(false);
+      setEditingDoc(null);
+      setDocFiles([]);
+      setDocThumbnailIndex(undefined);
+      alert('서식이 등록되었습니다.');
+    },
+  });
+
+  const updateDocMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: FormData }) => api.patch(`/documents/items/${id}/`, data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminDocCategories'] });
+      setEditingDoc(null);
+      setShowDocForm(false);
+      setDocFiles([]);
+      setDocThumbnailIndex(undefined);
+      alert('서식이 수정되었습니다.');
+    },
+  });
+
+  const deleteDocMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/documents/items/${id}/`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminDocCategories'] }),
+  });
+
+  const moveDocOrderMutation = useMutation({
+    mutationFn: ({ id, order }: { id: number; order: number }) => api.patch(`/documents/items/${id}/`, { order }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminDocCategories'] }),
+  });
+
+  const setDocThumbnailMutation = useMutation({
+    mutationFn: ({ docId, fileId }: { docId: number; fileId: number | null }) =>
+      api.post(`/documents/items/${docId}/set_thumbnail/`, { file_id: fileId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminDocCategories'] }),
+  });
+
+  const deleteDocFileMutation = useMutation({
+    mutationFn: ({ docId, fileId }: { docId: number; fileId: number }) =>
+      api.delete(`/documents/items/${docId}/delete_file/${fileId}/`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminDocCategories'] }),
+  });
+
   // All ChatRooms for club assignment
   const { data: allChatRooms } = useQuery({
     queryKey: ['allChatRoomsForAssignment'],
@@ -757,6 +859,7 @@ export default function AdminDashboard() {
       end_date: string;
       max_participants: number;
       visibility: string;
+      is_popup: boolean;
     }) => api.post('/schedule/events/', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminEvents'] });
@@ -1238,6 +1341,7 @@ export default function AdminDashboard() {
       end_date: formData.get('end_date') as string,
       max_participants: Number(formData.get('max_participants')) || 0,
       visibility: formData.get('visibility') as string,
+      is_popup: formData.get('is_popup') === 'on',
     };
 
     if (editingEvent) {
@@ -1297,6 +1401,7 @@ export default function AdminDashboard() {
             { key: 'messenger', label: '클럽 관리', badge: 0 },
             { key: 'banners', label: '배너 관리', badge: 0 },
             { key: 'organizations', label: '유관기관 관리', badge: 0 },
+            { key: 'documents', label: '서식 관리', badge: 0 },
             { key: 'sms', label: 'SMS 관리', badge: 0 },
           ].map((tab) => (
             <button
@@ -1725,7 +1830,7 @@ export default function AdminDashboard() {
                   <>
                     <FileDropZone
                       label="인사말 이미지"
-                      name="greeting_image"
+
                       files={aboutGreetingImage}
                       onFilesChange={setAboutGreetingImage}
                     />
@@ -1839,7 +1944,7 @@ export default function AdminDashboard() {
                   <div className="md:col-span-2">
                     <FileDropZone
                       label="프로필 사진"
-                      name="exec_photo"
+
                       files={executivePhoto}
                       onFilesChange={setExecutivePhoto}
                     />
@@ -2169,7 +2274,7 @@ export default function AdminDashboard() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">팝업 이미지 (선택)</label>
                   <FileDropZone
                     label="팝업 이미지"
-                    name="popup_image"
+
                     files={popupImage}
                     onFilesChange={setPopupImage}
                   />
@@ -2332,14 +2437,25 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">노출 범위</label>
-                  <select
-                    name="visibility"
-                    defaultValue={editingEvent?.visibility || 'member'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                  >
-                    <option value="member">회원 전용</option>
-                    <option value="public">공용</option>
-                  </select>
+                  <div className="flex items-center gap-4">
+                    <select
+                      name="visibility"
+                      defaultValue={editingEvent?.visibility || 'member'}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    >
+                      <option value="member">회원 전용</option>
+                      <option value="public">공용</option>
+                    </select>
+                    <label className="flex items-center gap-1.5 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        name="is_popup"
+                        defaultChecked={editingEvent?.is_popup || false}
+                        className="rounded text-green-600 focus:ring-green-500"
+                      />
+                      <span className="text-sm text-gray-700">팝업 표시</span>
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">시작 일시</label>
@@ -2422,6 +2538,9 @@ export default function AdminDashboard() {
                         }`}>
                           {event.visibility === 'public' ? '공용' : '회원전용'}
                         </span>
+                        {event.is_popup && (
+                          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-pink-100 text-pink-800">팝업</span>
+                        )}
                         <span className="font-medium">{event.title}</span>
                       </div>
                       <div className="text-sm text-gray-500 mt-1">
@@ -2698,7 +2817,7 @@ export default function AdminDashboard() {
                 )}
                 <FileDropZone
                   label={editingAlbum ? '새 사진 추가 (여러장 선택 가능)' : '사진 (여러장 선택 가능)'}
-                  name="photos"
+
                   multiple={true}
                   files={albumPhotos}
                   onFilesChange={(files) => {
@@ -3214,7 +3333,7 @@ export default function AdminDashboard() {
                 <div>
                   <FileDropZone
                     label="배너 이미지"
-                    name="image"
+
                     multiple={false}
                     files={bannerImage}
                     onFilesChange={setBannerImage}
@@ -3429,7 +3548,7 @@ export default function AdminDashboard() {
                 <div>
                   <FileDropZone
                     label="로고 이미지"
-                    name="logo"
+
                     multiple={false}
                     files={orgLogo}
                     onFilesChange={setOrgLogo}
@@ -3559,6 +3678,368 @@ export default function AdminDashboard() {
             ) : (
               <div className="p-8 text-center text-gray-500">유관기관이 없습니다.</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Documents Tab */}
+      {activeTab === 'documents' && (
+        <div className="space-y-6">
+          {/* 카테고리 관리 */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">서식 카테고리</h2>
+              <button
+                onClick={() => {
+                  setShowDocCategoryForm(!showDocCategoryForm);
+                  setEditingDocCategory(null);
+                }}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
+              >
+                {showDocCategoryForm ? '취소' : '카테고리 추가'}
+              </button>
+            </div>
+
+            {(showDocCategoryForm || editingDocCategory) && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  const name = formData.get('name') as string;
+                  if (!name.trim()) return;
+                  if (editingDocCategory) {
+                    updateDocCategoryMutation.mutate({ id: editingDocCategory.id, data: { name: name.trim() } });
+                  } else {
+                    createDocCategoryMutation.mutate({ name: name.trim() });
+                  }
+                }}
+                className="p-4 border-b border-gray-200 bg-gray-50"
+              >
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    name="name"
+                    required
+                    defaultValue={editingDocCategory?.name || ''}
+                    placeholder="카테고리 이름 (예: 규정, 규장, 서식)"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={createDocCategoryMutation.isPending || updateDocCategoryMutation.isPending}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {editingDocCategory ? '수정' : '추가'}
+                  </button>
+                  {editingDocCategory && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingDocCategory(null)}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-400"
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
+              </form>
+            )}
+
+            <div className="divide-y divide-gray-200">
+              {docCategoriesLoading ? (
+                <div className="p-8 text-center text-gray-500">로딩 중...</div>
+              ) : docCategories && docCategories.length > 0 ? (
+                docCategories.map((cat) => (
+                  <div key={cat.id} className="p-4 flex justify-between items-center">
+                    <div>
+                      <span className="font-medium">{cat.name}</span>
+                      <span className="text-sm text-gray-500 ml-2">({cat.documents.length}개 서식)</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingDocCategory(cat);
+                          setShowDocCategoryForm(true);
+                        }}
+                        className="px-3 py-1 text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (cat.documents.length > 0) {
+                            alert('서식이 포함된 카테고리는 삭제할 수 없습니다. 서식을 먼저 삭제해주세요.');
+                            return;
+                          }
+                          if (confirm(`"${cat.name}" 카테고리를 삭제하시겠습니까?`)) {
+                            deleteDocCategoryMutation.mutate(cat.id);
+                          }
+                        }}
+                        className="px-3 py-1 text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-gray-500">등록된 카테고리가 없습니다.</div>
+              )}
+            </div>
+          </div>
+
+          {/* 서식 관리 */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">서식 목록</h2>
+              <button
+                onClick={() => {
+                  if (!docCategories || docCategories.length === 0) {
+                    alert('카테고리를 먼저 등록해주세요.');
+                    return;
+                  }
+                  setShowDocForm(!showDocForm);
+                  setEditingDoc(null);
+                  setDocFiles([]);
+                  setDocThumbnailIndex(undefined);
+                }}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
+              >
+                {showDocForm && !editingDoc ? '취소' : '서식 등록'}
+              </button>
+            </div>
+
+            {(showDocForm || editingDoc) && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const formData = new FormData();
+
+                  formData.append('category', form.querySelector<HTMLSelectElement>('[name="category"]')?.value || '');
+                  formData.append('title', form.querySelector<HTMLInputElement>('[name="title"]')?.value || '');
+                  formData.append('description', form.querySelector<HTMLTextAreaElement>('[name="description"]')?.value || '');
+
+                  if (docFiles.length > 0) {
+                    docFiles.forEach((file) => formData.append('files', file));
+                  } else if (!editingDoc) {
+                    alert('파일을 선택해주세요.');
+                    return;
+                  }
+
+                  if (editingDoc) {
+                    updateDocMutation.mutate({ id: editingDoc.id, data: formData });
+                  } else {
+                    createDocMutation.mutate(formData);
+                  }
+                }}
+                className="p-4 border-b border-gray-200 bg-gray-50"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
+                    <select
+                      name="category"
+                      required
+                      defaultValue={editingDoc?.category || ''}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    >
+                      <option value="">선택</option>
+                      {docCategories?.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
+                    <input
+                      type="text"
+                      name="title"
+                      required
+                      defaultValue={editingDoc?.title || ''}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">설명</label>
+                    <textarea
+                      name="description"
+                      rows={2}
+                      defaultValue={editingDoc?.description || ''}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <FileDropZone
+                      label={editingDoc ? '새 파일 추가' : '파일 업로드'}
+
+                      multiple={true}
+                      accept="*/*"
+                      files={docFiles}
+                      onFilesChange={setDocFiles}
+                      coverIndex={docThumbnailIndex}
+                      onCoverSelect={setDocThumbnailIndex}
+                    />
+                  </div>
+                </div>
+
+                {/* 수정 시 기존 파일 목록 */}
+                {editingDoc && editingDoc.files.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-sm font-medium text-gray-700 mb-2">기존 파일 ({editingDoc.files.length}개) - 이미지 클릭으로 대표 지정</p>
+                    <div className="flex flex-wrap gap-2">
+                      {editingDoc.files.map((ef) => {
+                        const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(ef.original_name);
+                        const isThumbnail = editingDoc.thumbnail_id === ef.id;
+                        return (
+                          <div key={ef.id} className="relative group">
+                            {isImage ? (
+                              <img
+                                src={ef.file}
+                                alt={ef.original_name}
+                                className={`w-20 h-20 object-contain rounded-lg cursor-pointer bg-gray-50 ${
+                                  isThumbnail
+                                    ? 'ring-3 ring-green-500 border-2 border-green-500'
+                                    : 'border border-gray-200 hover:ring-2 hover:ring-blue-300'
+                                }`}
+                                onClick={() => setDocThumbnailMutation.mutate({ docId: editingDoc.id, fileId: ef.id })}
+                              />
+                            ) : (
+                              <div className="w-20 h-20 rounded-lg border border-gray-200 bg-gray-50 flex flex-col items-center justify-center">
+                                <span className="text-lg font-bold text-gray-400">{ef.original_name.split('.').pop()?.toUpperCase()}</span>
+                              </div>
+                            )}
+                            {isThumbnail && (
+                              <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">대표</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(`"${ef.original_name}" 파일을 삭제하시겠습니까?`)) {
+                                  deleteDocFileMutation.mutate({ docId: editingDoc.id, fileId: ef.id });
+                                }
+                              }}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              X
+                            </button>
+                            <p className="text-xs text-gray-500 truncate w-20 mt-1">{ef.original_name}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={createDocMutation.isPending || updateDocMutation.isPending}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {createDocMutation.isPending || updateDocMutation.isPending ? '저장 중...' : editingDoc ? '수정' : '저장'}
+                  </button>
+                  {editingDoc && (
+                    <button
+                      type="button"
+                      onClick={() => { setEditingDoc(null); setShowDocForm(false); setDocFiles([]); setDocThumbnailIndex(undefined); }}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-400"
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
+              </form>
+            )}
+
+            <div className="divide-y divide-gray-200">
+              {docCategoriesLoading ? (
+                <div className="p-8 text-center text-gray-500">로딩 중...</div>
+              ) : docCategories && docCategories.some(c => c.documents.length > 0) ? (
+                docCategories.map((cat) =>
+                  cat.documents.length > 0 && (
+                    <div key={cat.id}>
+                      <div className="px-4 py-2 bg-gray-50 border-b">
+                        <span className="text-sm font-semibold text-gray-600">{cat.name}</span>
+                      </div>
+                      {cat.documents.map((doc, idx) => {
+                        const thumbFile = doc.thumbnail_id ? doc.files.find(f => f.id === doc.thumbnail_id) : null;
+                        const firstFile = doc.files[0];
+                        return (
+                        <div key={doc.id} className="p-4 flex justify-between items-center">
+                          <div className="flex items-center gap-3">
+                            {thumbFile && /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(thumbFile.original_name) ? (
+                              <img src={thumbFile.file} alt="" className="w-12 h-12 rounded object-cover border" />
+                            ) : (
+                              <div className="w-12 h-12 rounded bg-gray-100 flex items-center justify-center border text-xs font-bold text-gray-400">
+                                {firstFile ? firstFile.original_name.split('.').pop()?.toUpperCase() : 'N/A'}
+                              </div>
+                            )}
+                            <div>
+                              <span className="font-medium">{doc.title}</span>
+                              <span className="text-xs text-gray-400 ml-2">({doc.files.length}개 파일)</span>
+                              {doc.description && <p className="text-xs text-gray-500">{doc.description}</p>}
+                              <p className="text-xs text-gray-400">다운로드 {doc.download_count}회 | {new Date(doc.created_at).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                if (idx > 0) {
+                                  const prevDoc = cat.documents[idx - 1];
+                                  moveDocOrderMutation.mutate({ id: doc.id, order: prevDoc.order });
+                                  moveDocOrderMutation.mutate({ id: prevDoc.id, order: doc.order });
+                                }
+                              }}
+                              disabled={idx === 0}
+                              className="px-2 py-1 text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-30"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (idx < cat.documents.length - 1) {
+                                  const nextDoc = cat.documents[idx + 1];
+                                  moveDocOrderMutation.mutate({ id: doc.id, order: nextDoc.order });
+                                  moveDocOrderMutation.mutate({ id: nextDoc.id, order: doc.order });
+                                }
+                              }}
+                              disabled={idx === cat.documents.length - 1}
+                              className="px-2 py-1 text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-30"
+                            >
+                              ↓
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingDoc(doc);
+                                setShowDocForm(true);
+                                setDocFiles([]);
+                                setDocThumbnailIndex(undefined);
+                              }}
+                              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
+                            >
+                              수정
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm(`"${doc.title}" 서식을 삭제하시겠습니까?`)) {
+                                  deleteDocMutation.mutate(doc.id);
+                                }
+                              }}
+                              className="px-3 py-1 text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )
+              ) : (
+                <div className="p-8 text-center text-gray-500">등록된 서식이 없습니다.</div>
+              )}
+            </div>
           </div>
         </div>
       )}

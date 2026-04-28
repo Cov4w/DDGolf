@@ -16,6 +16,7 @@ urlpatterns = [
     path("api/schedule/", include("schedule.urls")),
     path("api/messenger/", include("messenger.urls")),
     path("api/sms/", include("sms.urls")),
+    path("api/documents/", include("documents.urls")),
 ]
 
 if settings.DEBUG:

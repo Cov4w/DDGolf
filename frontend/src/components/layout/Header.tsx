@@ -151,6 +151,14 @@ export default function Header() {
                 갤러리
               </Link>
             </li>
+            <li>
+              <Link
+                to="/documents"
+                className="block px-8 py-4 text-white font-medium hover:bg-green-900 transition-colors"
+              >
+                서식다운로드
+              </Link>
+            </li>
             {/* 비로그인 또는 미승인 회원: 공개 공지사항 */}
             {(!isAuthenticated || !user?.is_approved) && (
               <li>

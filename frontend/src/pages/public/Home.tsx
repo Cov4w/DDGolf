@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { galleryService } from '../../services/gallery';
 import { noticesService } from '../../services/notices';
@@ -9,11 +9,182 @@ import { boardsService } from '../../services/boards';
 import { useAuthStore } from '../../store/authStore';
 import BannerSlider from '../../components/common/BannerSlider';
 import NoticePopup from '../../components/common/NoticePopup';
+import type { Event } from '../../types';
+
+// 드래그 가능한 일정 팝업 컴포넌트
+function EventPopup({
+  events,
+  onClose,
+  navigate,
+  initialPosition,
+}: {
+  events: Event[];
+  onClose: () => void;
+  navigate: (path: string) => void;
+  initialPosition?: { x: number; y: number };
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [position, setPosition] = useState(initialPosition || { x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!initialPosition && popupRef.current) {
+      const rect = popupRef.current.getBoundingClientRect();
+      setPosition({
+        x: (window.innerWidth - rect.width) / 2,
+        y: Math.max(40, (window.innerHeight - rect.height) / 3),
+      });
+    }
+  }, [initialPosition]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    setIsDragging(true);
+    dragOffset.current = {
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    };
+    e.preventDefault();
+  }, [position]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      setPosition({
+        x: e.clientX - dragOffset.current.x,
+        y: e.clientY - dragOffset.current.y,
+      });
+    };
+    const handleMouseUp = () => setIsDragging(false);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
+  const currentEvent = events[currentIndex];
+  if (!currentEvent) return null;
+
+  return (
+    <div
+      ref={popupRef}
+      className="fixed z-50 bg-white rounded-lg shadow-2xl w-full max-w-sm overflow-hidden"
+      style={{
+        left: position.x,
+        top: position.y,
+        userSelect: isDragging ? 'none' : 'auto',
+      }}
+    >
+      {/* Header - draggable */}
+      <div
+        className="flex justify-between items-center px-4 py-3 border-b bg-green-700 text-white cursor-move"
+        onMouseDown={handleMouseDown}
+      >
+        <h3 className="font-semibold text-sm truncate flex-1">{currentEvent.title}</h3>
+        <button
+          onClick={onClose}
+          className="text-white hover:text-green-200 text-xl leading-none ml-2"
+        >
+          &times;
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="p-4">
+        <div className="space-y-2 mb-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-gray-500 w-16">일시</span>
+            <span className="text-gray-800">
+              {new Date(currentEvent.start_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+              {' '}
+              {new Date(currentEvent.start_date).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          {currentEvent.location && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500 w-16">장소</span>
+              <span className="text-gray-800">{currentEvent.location}</span>
+            </div>
+          )}
+          {currentEvent.description && (
+            <p className="text-gray-600 text-sm mt-2 whitespace-pre-wrap">{currentEvent.description}</p>
+          )}
+        </div>
+
+        {/* Action Button */}
+        <div className="mb-3">
+          <button
+            onClick={() => {
+              onClose();
+              navigate(`/schedule/${currentEvent.id}`);
+            }}
+            className="w-full py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 font-medium"
+          >
+            자세히 보기
+          </button>
+        </div>
+
+        {/* Navigation for multiple event popups */}
+        {events.length > 1 && (
+          <div className="flex justify-center items-center gap-3 mb-3">
+            <button
+              onClick={() => setCurrentIndex(i => Math.max(0, i - 1))}
+              disabled={currentIndex === 0}
+              className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-sm"
+            >
+              &lt; 이전
+            </button>
+            <span className="text-xs text-gray-500">
+              {currentIndex + 1} / {events.length}
+            </span>
+            <button
+              onClick={() => setCurrentIndex(i => Math.min(events.length - 1, i + 1))}
+              disabled={currentIndex === events.length - 1}
+              className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-sm"
+            >
+              다음 &gt;
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-3 border-t bg-gray-50 flex justify-between items-center">
+        <label className="flex items-center cursor-pointer text-sm text-gray-500">
+          <input
+            type="checkbox"
+            onChange={(e) => {
+              if (e.target.checked) {
+                const today = new Date().toISOString().split('T')[0];
+                const hiddenIds = JSON.parse(localStorage.getItem('event_popup_hidden') || '{}');
+                events.forEach((ev: Event) => { hiddenIds[ev.id] = today; });
+                localStorage.setItem('event_popup_hidden', JSON.stringify(hiddenIds));
+              }
+            }}
+            className="mr-2 rounded text-green-600 focus:ring-green-500"
+          />
+          오늘 하루 보지 않기
+        </label>
+        <button
+          onClick={onClose}
+          className="text-sm text-gray-500 hover:text-gray-700"
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const { isAuthenticated, user } = useAuthStore();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'notices' | 'boards'>('notices');
   const [showPopup, setShowPopup] = useState(true);
+  const [showEventPopup, setShowEventPopup] = useState(true);
 
   const { data: popupNotices } = useQuery({
     queryKey: ['popupNotices'],
@@ -24,11 +195,27 @@ export default function Home() {
     retry: false,
   });
 
+  const { data: popupEvents } = useQuery({
+    queryKey: ['popupEvents'],
+    queryFn: async () => {
+      try { return await scheduleService.getPopupEvents(); }
+      catch { return []; }
+    },
+    retry: false,
+  });
+
   // Filter out popups hidden today
   const visiblePopups = (popupNotices || []).filter((p) => {
     const hiddenData = JSON.parse(localStorage.getItem('popup_hidden') || '{}');
     const today = new Date().toISOString().split('T')[0];
     return hiddenData[p.id] !== today;
+  });
+
+  // Filter out event popups hidden today
+  const visibleEventPopups = (popupEvents || []).filter((e: Event) => {
+    const hiddenData = JSON.parse(localStorage.getItem('event_popup_hidden') || '{}');
+    const today = new Date().toISOString().split('T')[0];
+    return hiddenData[e.id] !== today;
   });
 
   const { data: albums } = useQuery({
@@ -124,6 +311,11 @@ export default function Home() {
                 </Link>
               </li>
             )}
+            <li>
+              <Link to="/documents" className="text-gray-600 hover:text-green-700 block py-1">
+                → 서식다운로드
+              </Link>
+            </li>
             {!isAuthenticated && (
               <li>
                 <Link to="/register" className="text-gray-600 hover:text-green-700 block py-1">
@@ -393,9 +585,29 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Popup Notices */}
+      {/* Popup Notices - positioned left of center */}
       {showPopup && visiblePopups.length > 0 && (
-        <NoticePopup popups={visiblePopups} onClose={() => setShowPopup(false)} />
+        <NoticePopup
+          popups={visiblePopups}
+          onClose={() => setShowPopup(false)}
+          initialPosition={{
+            x: Math.max(20, (window.innerWidth / 2) - (visibleEventPopups.length > 0 && showEventPopup ? 400 : 200)),
+            y: 80,
+          }}
+        />
+      )}
+
+      {/* Popup Events - positioned right of notice popup */}
+      {showEventPopup && visibleEventPopups.length > 0 && (
+        <EventPopup
+          events={visibleEventPopups}
+          onClose={() => setShowEventPopup(false)}
+          navigate={navigate}
+          initialPosition={{
+            x: Math.max(20, (window.innerWidth / 2) + (visiblePopups.length > 0 && showPopup ? 10 : -200)),
+            y: 80,
+          }}
+        />
       )}
     </div>
   );

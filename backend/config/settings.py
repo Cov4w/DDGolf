@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "schedule",
     "notices",
     "sms",
+    "documents",
 ]
 
 SITE_ID = 1

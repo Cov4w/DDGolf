@@ -22,7 +22,7 @@ class EventListSerializer(serializers.ModelSerializer):
         model = Event
         fields = ['id', 'title', 'event_type', 'location', 'location_link', 'start_date', 'end_date',
                   'max_participants', 'participant_count', 'pending_participant_count',
-                  'visibility', 'visibility_display', 'created_by', 'created_at']
+                  'visibility', 'visibility_display', 'is_popup', 'created_by', 'created_at']
 
     def get_participant_count(self, obj):
         return obj.participants.filter(status=EventParticipant.Status.CONFIRMED).count()
@@ -41,7 +41,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
         model = Event
         fields = ['id', 'title', 'description', 'event_type', 'location', 'location_link',
                   'start_date', 'end_date', 'max_participants', 'participants',
-                  'is_participating', 'visibility', 'visibility_display',
+                  'is_participating', 'visibility', 'visibility_display', 'is_popup',
                   'created_by', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 
@@ -56,4 +56,4 @@ class EventCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = ['title', 'description', 'event_type', 'location', 'location_link',
-                  'start_date', 'end_date', 'max_participants', 'visibility']
+                  'start_date', 'end_date', 'max_participants', 'visibility', 'is_popup']

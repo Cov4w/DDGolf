@@ -96,6 +96,16 @@ class EventViewSet(viewsets.ModelViewSet):
         serializer = EventListSerializer(events, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny])
+    def popup_events(self, request):
+        """팝업 표시 일정 조회"""
+        events = Event.objects.filter(
+            is_popup=True,
+            start_date__gte=timezone.now()
+        ).order_by('start_date')
+        serializer = EventListSerializer(events, many=True)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def approve_participant(self, request, pk=None):
         """참가자 승인 (관리자)"""

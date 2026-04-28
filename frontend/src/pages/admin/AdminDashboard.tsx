@@ -345,10 +345,14 @@ function ClubAssignSelect({
   );
 }
 
+const APP_VERSION = 'v1.11.20260428';
+
 export default function AdminDashboard() {
   const [searchParams] = useSearchParams();
   const initialTab = (searchParams.get('tab') as TabType) || 'dashboard';
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [showVersionModal, setShowVersionModal] = useState(false);
+  const [readmeContent, setReadmeContent] = useState<string | null>(null);
   const [memberFilter, setMemberFilter] = useState<'pending' | 'all'>('pending');
   const [showNoticeForm, setShowNoticeForm] = useState(false);
   const [editingNotice, setEditingNotice] = useState<Notice | null>(null);
@@ -1386,7 +1390,67 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">관리자 대시보드</h1>
+      <div className="flex items-center gap-3 mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">관리자 대시보드</h1>
+        <button
+          onClick={async () => {
+            setShowVersionModal(true);
+            if (!readmeContent) {
+              try {
+                const res = await api.get('/version/readme/');
+                setReadmeContent(res.data.content);
+              } catch {
+                setReadmeContent('README를 불러올 수 없습니다.');
+              }
+            }
+          }}
+          className="px-2.5 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full hover:bg-green-200 transition-colors"
+        >
+          {APP_VERSION}
+        </button>
+      </div>
+
+      {/* Version Modal */}
+      {showVersionModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowVersionModal(false)}>
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center px-6 py-4 border-b bg-green-700 text-white">
+              <h2 className="font-bold text-lg">DDGolf {APP_VERSION}</h2>
+              <button onClick={() => setShowVersionModal(false)} className="text-white hover:text-green-200 text-2xl leading-none">&times;</button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(80vh-64px)]">
+              {readmeContent ? (
+                <div className="text-sm text-gray-700 leading-relaxed space-y-2">
+                  {readmeContent.split('\n').map((line, i) => {
+                    if (line.startsWith('### ')) return <h3 key={i} className="text-base font-bold text-gray-800 mt-4 mb-1">{line.slice(4)}</h3>;
+                    if (line.startsWith('## ')) return <h2 key={i} className="text-lg font-bold text-gray-900 mt-5 mb-2 pb-1 border-b">{line.slice(3)}</h2>;
+                    if (line.startsWith('# ')) return <h1 key={i} className="text-xl font-bold text-gray-900 mt-4 mb-2">{line.slice(2)}</h1>;
+                    if (line.startsWith('| ') && line.includes('---')) return <hr key={i} className="border-gray-200 my-1" />;
+                    if (line.startsWith('| ')) {
+                      const cells = line.split('|').filter(Boolean).map(c => c.trim());
+                      return (
+                        <div key={i} className="grid gap-2 text-xs" style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))` }}>
+                          {cells.map((cell, j) => (
+                            <span key={j} className={`px-2 py-1 ${i === 0 || line.includes('버전') && j === 0 ? 'font-semibold bg-gray-50' : ''}`}>{cell}</span>
+                          ))}
+                        </div>
+                      );
+                    }
+                    if (line.startsWith('- ')) return <p key={i} className="pl-4 before:content-['•'] before:mr-2 before:text-green-600">{line.slice(2)}</p>;
+                    if (line.startsWith('```')) return null;
+                    if (line.startsWith('---')) return <hr key={i} className="border-gray-300 my-3" />;
+                    if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-bold text-gray-800">{line.replace(/\*\*/g, '')}</p>;
+                    if (line.trim() === '') return <div key={i} className="h-1" />;
+                    return <p key={i}>{line}</p>;
+                  })}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">로딩 중...</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Tabs */}
       <div className="border-b border-gray-200 mb-6">

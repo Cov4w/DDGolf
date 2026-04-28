@@ -6,6 +6,18 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import JsonResponse
+from pathlib import Path
+
+
+def readme_view(request):
+    readme_path = Path(settings.BASE_DIR).parent / 'README.md'
+    try:
+        content = readme_path.read_text(encoding='utf-8')
+    except FileNotFoundError:
+        content = 'README.md 파일을 찾을 수 없습니다.'
+    return JsonResponse({'content': content})
+
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -17,6 +29,7 @@ urlpatterns = [
     path("api/messenger/", include("messenger.urls")),
     path("api/sms/", include("sms.urls")),
     path("api/documents/", include("documents.urls")),
+    path("api/version/readme/", readme_view),
 ]
 
 if settings.DEBUG:

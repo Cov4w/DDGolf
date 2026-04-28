@@ -48,6 +48,15 @@ function EventPopup({
     e.preventDefault();
   }, [position]);
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    setIsDragging(true);
+    dragOffset.current = {
+      x: touch.clientX - position.x,
+      y: touch.clientY - position.y,
+    };
+  }, [position]);
+
   useEffect(() => {
     if (!isDragging) return;
     const handleMouseMove = (e: MouseEvent) => {
@@ -56,12 +65,23 @@ function EventPopup({
         y: e.clientY - dragOffset.current.y,
       });
     };
-    const handleMouseUp = () => setIsDragging(false);
+    const handleTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      setPosition({
+        x: touch.clientX - dragOffset.current.x,
+        y: touch.clientY - dragOffset.current.y,
+      });
+    };
+    const handleEnd = () => setIsDragging(false);
     window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleEnd);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleEnd);
     };
   }, [isDragging]);
 
@@ -71,7 +91,7 @@ function EventPopup({
   return (
     <div
       ref={popupRef}
-      className="fixed z-50 bg-white rounded-lg shadow-2xl w-full max-w-sm overflow-hidden"
+      className="fixed z-50 bg-white rounded-lg shadow-2xl w-[calc(100vw-2rem)] sm:w-full max-w-sm max-h-[80vh] overflow-hidden flex flex-col"
       style={{
         left: position.x,
         top: position.y,
@@ -82,6 +102,7 @@ function EventPopup({
       <div
         className="flex justify-between items-center px-4 py-3 border-b bg-green-700 text-white cursor-move"
         onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
       >
         <h3 className="font-semibold text-sm truncate flex-1">{currentEvent.title}</h3>
         <button
@@ -93,7 +114,7 @@ function EventPopup({
       </div>
 
       {/* Content */}
-      <div className="p-4">
+      <div className="p-4 overflow-y-auto flex-1">
         <div className="space-y-2 mb-4">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-gray-500 w-16">일시</span>
@@ -260,7 +281,7 @@ export default function Home() {
   return (
     <div className="bg-white">
       {/* Hero Banner */}
-      <section className="relative h-[400px] overflow-hidden">
+      <section className="relative h-[250px] sm:h-[350px] md:h-[400px] overflow-hidden">
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{
@@ -270,8 +291,8 @@ export default function Home() {
         />
         <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
 
-        {/* Quick Menu */}
-        <div className="absolute right-8 top-8 bg-white/95 rounded-lg shadow-lg p-4 w-48">
+        {/* Quick Menu - hidden on mobile */}
+        <div className="hidden lg:block absolute right-8 top-8 bg-white/95 rounded-lg shadow-lg p-4 w-48">
           <h3 className="text-center font-bold text-gray-800 border-b pb-2 mb-3">Quick Menu</h3>
           <ul className="space-y-2 text-sm">
             <li>
@@ -327,9 +348,9 @@ export default function Home() {
         </div>
 
         {/* Banner Text */}
-        <div className="absolute bottom-8 left-8 text-white">
-          <h1 className="text-4xl font-bold mb-2 drop-shadow-lg">대덕구골프협회</h1>
-          <p className="text-xl drop-shadow-lg">함께하는 골프, 즐거운 라운딩</p>
+        <div className="absolute bottom-4 left-4 sm:bottom-8 sm:left-8 text-white">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 sm:mb-2 drop-shadow-lg">대덕구골프협회</h1>
+          <p className="text-base sm:text-lg md:text-xl drop-shadow-lg">함께하는 골프, 즐거운 라운딩</p>
         </div>
       </section>
 
@@ -585,28 +606,36 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Popup Notices - positioned left of center */}
+      {/* Popup Notices - positioned left of center (centered on mobile) */}
       {showPopup && visiblePopups.length > 0 && (
         <NoticePopup
           popups={visiblePopups}
           onClose={() => setShowPopup(false)}
-          initialPosition={{
-            x: Math.max(20, (window.innerWidth / 2) - (visibleEventPopups.length > 0 && showEventPopup ? 400 : 200)),
-            y: 80,
-          }}
+          initialPosition={
+            window.innerWidth < 640
+              ? { x: 16, y: 80 }
+              : {
+                  x: Math.max(20, (window.innerWidth / 2) - (visibleEventPopups.length > 0 && showEventPopup ? 400 : 200)),
+                  y: 80,
+                }
+          }
         />
       )}
 
-      {/* Popup Events - positioned right of notice popup */}
+      {/* Popup Events - positioned right of notice popup (below on mobile) */}
       {showEventPopup && visibleEventPopups.length > 0 && (
         <EventPopup
           events={visibleEventPopups}
           onClose={() => setShowEventPopup(false)}
           navigate={navigate}
-          initialPosition={{
-            x: Math.max(20, (window.innerWidth / 2) + (visiblePopups.length > 0 && showPopup ? 10 : -200)),
-            y: 80,
-          }}
+          initialPosition={
+            window.innerWidth < 640
+              ? { x: 16, y: visiblePopups.length > 0 && showPopup ? 320 : 80 }
+              : {
+                  x: Math.max(20, (window.innerWidth / 2) + (visiblePopups.length > 0 && showPopup ? 10 : -200)),
+                  y: 80,
+                }
+          }
         />
       )}
     </div>

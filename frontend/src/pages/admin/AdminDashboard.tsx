@@ -345,7 +345,7 @@ function ClubAssignSelect({
   );
 }
 
-const APP_VERSION = 'v1.11.20260428';
+const APP_VERSION = 'v1.12.20260428';
 
 export default function AdminDashboard() {
   const [searchParams] = useSearchParams();
@@ -371,6 +371,8 @@ export default function AdminDashboard() {
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   const [albumPhotos, setAlbumPhotos] = useState<File[]>([]);
   const [albumCoverIndex, setAlbumCoverIndex] = useState(0);
+  const [showGalleryCategoryForm, setShowGalleryCategoryForm] = useState(false);
+  const [editingGalleryCategory, setEditingGalleryCategory] = useState<{ id: number; name: string; order: number } | null>(null);
   const [showBannerForm, setShowBannerForm] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [showOrgForm, setShowOrgForm] = useState(false);
@@ -528,6 +530,16 @@ export default function AdminDashboard() {
         return response.data.results as Album[];
       }
       return response.data as Album[];
+    },
+    enabled: activeTab === 'gallery',
+  });
+
+  // Gallery Categories Query
+  const { data: galleryCategories, isLoading: galleryCategoriesLoading } = useQuery({
+    queryKey: ['adminGalleryCategories'],
+    queryFn: async () => {
+      const response = await api.get('/gallery/categories/');
+      return response.data as { id: number; name: string; order: number; album_count: number }[];
     },
     enabled: activeTab === 'gallery',
   });
@@ -927,7 +939,10 @@ export default function AdminDashboard() {
 
   const deleteAlbumMutation = useMutation({
     mutationFn: (albumId: number) => api.delete(`/gallery/albums/${albumId}/`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminAlbums'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
+      queryClient.invalidateQueries({ queryKey: ['adminGalleryCategories'] });
+    },
   });
 
   const createAlbumMutation = useMutation({
@@ -937,7 +952,7 @@ export default function AdminDashboard() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
-
+      queryClient.invalidateQueries({ queryKey: ['adminGalleryCategories'] });
       setAlbumPhotos([]); setAlbumCoverIndex(0);
       setShowAlbumForm(false);
       alert('앨범이 등록되었습니다.');
@@ -951,8 +966,8 @@ export default function AdminDashboard() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
+      queryClient.invalidateQueries({ queryKey: ['adminGalleryCategories'] });
       setEditingAlbum(null);
-
       setAlbumPhotos([]); setAlbumCoverIndex(0);
       setShowAlbumForm(false);
       alert('앨범이 수정되었습니다.');
@@ -974,6 +989,34 @@ export default function AdminDashboard() {
         setEditingAlbum({ ...editingAlbum, cover_photo_id: variables.photoId });
       }
     },
+  });
+
+  // Gallery Category Mutations
+  const createGalleryCategoryMutation = useMutation({
+    mutationFn: (data: { name: string }) => api.post('/gallery/categories/', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminGalleryCategories'] });
+      setShowGalleryCategoryForm(false);
+      setEditingGalleryCategory(null);
+      alert('카테고리가 등록되었습니다.');
+    },
+    onError: () => alert('카테고리 등록에 실패했습니다.'),
+  });
+
+  const updateGalleryCategoryMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { name: string } }) => api.patch(`/gallery/categories/${id}/`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminGalleryCategories'] });
+      setEditingGalleryCategory(null);
+      alert('카테고리가 수정되었습니다.');
+    },
+    onError: () => alert('카테고리 수정에 실패했습니다.'),
+  });
+
+  const deleteGalleryCategoryMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/gallery/categories/${id}/`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminGalleryCategories'] }),
+    onError: () => alert('카테고리 삭제에 실패했습니다.'),
   });
 
   // Ban Mutations
@@ -1364,6 +1407,10 @@ export default function AdminDashboard() {
     formData.append('description', form.querySelector<HTMLTextAreaElement>('[name="description"]')?.value || '');
     formData.append('album_type', form.querySelector<HTMLSelectElement>('[name="album_type"]')?.value || 'public');
     formData.append('is_public', form.querySelector<HTMLInputElement>('[name="is_public"]')?.checked ? 'true' : 'false');
+    const categoryVal = form.querySelector<HTMLSelectElement>('[name="category"]')?.value;
+    if (categoryVal) {
+      formData.append('category', categoryVal);
+    }
 
     if (editingAlbum) {
       albumPhotos.forEach((photo) => {
@@ -1454,7 +1501,7 @@ export default function AdminDashboard() {
 
       {/* Main Tabs */}
       <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex flex-wrap gap-x-4 gap-y-1">
+        <nav className="-mb-px flex overflow-x-auto gap-x-4 scrollbar-hide">
           {[
             { key: 'dashboard', label: '대시보드', badge: 0 },
             { key: 'members', label: '회원 관리', badge: adminNoti?.pending_users || 0 },
@@ -1471,7 +1518,7 @@ export default function AdminDashboard() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as TabType)}
-              className={`inline-flex items-center gap-1.5 py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+              className={`inline-flex items-center gap-1.5 py-3 px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap ${
                 activeTab === tab.key
                   ? 'border-green-600 text-green-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -2786,217 +2833,338 @@ export default function AdminDashboard() {
 
       {/* Gallery Tab */}
       {activeTab === 'gallery' && (
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-lg font-semibold">갤러리 앨범 목록</h2>
-            <button
-              onClick={() => {
-                if (showAlbumForm && !editingAlbum) {
-            
-                  setAlbumPhotos([]); setAlbumCoverIndex(0);
-                }
-                setEditingAlbum(null);
-          
-                setAlbumPhotos([]); setAlbumCoverIndex(0);
-                setShowAlbumForm(!showAlbumForm);
-              }}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
-            >
-              {showAlbumForm && !editingAlbum ? '취소' : '새 앨범'}
-            </button>
-          </div>
+        <div className="space-y-6">
+          {/* 갤러리 카테고리 관리 */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">갤러리 카테고리</h2>
+              <button
+                onClick={() => {
+                  setShowGalleryCategoryForm(!showGalleryCategoryForm);
+                  setEditingGalleryCategory(null);
+                }}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
+              >
+                {showGalleryCategoryForm ? '취소' : '카테고리 추가'}
+              </button>
+            </div>
 
-          {(showAlbumForm || editingAlbum) && (
-            <form ref={albumFormRef} key={editingAlbum?.id || 'new'} onSubmit={handleAlbumSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
+            {(showGalleryCategoryForm || editingGalleryCategory) && (
+              <form
+                key={editingGalleryCategory?.id || 'new'}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  const name = formData.get('name') as string;
+                  if (!name.trim()) return;
+                  if (editingGalleryCategory) {
+                    updateGalleryCategoryMutation.mutate({ id: editingGalleryCategory.id, data: { name: name.trim() } });
+                  } else {
+                    createGalleryCategoryMutation.mutate({ name: name.trim() });
+                  }
+                }}
+                className="p-4 border-b border-gray-200 bg-gray-50"
+              >
+                <div className="flex gap-2">
                   <input
                     type="text"
-                    name="title"
+                    name="name"
                     required
-                    defaultValue={editingAlbum?.title || ''}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    defaultValue={editingGalleryCategory?.name || ''}
+                    placeholder="카테고리 이름 (예: 대회, 행사, 연습)"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">설명</label>
-                  <textarea
-                    name="description"
-                    rows={2}
-                    defaultValue={editingAlbum?.description || ''}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">앨범 유형</label>
-                  <select
-                    name="album_type"
-                    defaultValue={editingAlbum?.album_type || 'public'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                  >
-                    <option value="public">공용 갤러리</option>
-                    <option value="member">회원 전용 갤러리</option>
-                  </select>
-                </div>
-                {editingAlbum?.photos && editingAlbum.photos.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">기존 사진 (클릭하여 대표 지정)</label>
-                    <div className="flex flex-wrap gap-2">
-                      {editingAlbum.photos.map((photo) => {
-                        const isCover = editingAlbum.cover_photo_id === photo.id;
-                        return (
-                          <div key={photo.id} className="relative group">
-                            <img
-                              src={photo.image}
-                              alt=""
-                              className={`w-20 h-20 object-cover rounded cursor-pointer ${isCover ? 'ring-3 ring-green-500 border-2 border-green-500' : 'border border-gray-300 hover:ring-2 hover:ring-blue-300'}`}
-                              onClick={() => {
-                                if (!isCover) {
-                                  setCoverMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
-                                }
-                              }}
-                            />
-                            {isCover && (
-                              <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                                대표
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (window.confirm('이 사진을 삭제하시겠습니까?')) {
-                                  deletePhotoMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
-                                }
-                              }}
-                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              X
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                <FileDropZone
-                  label={editingAlbum ? '새 사진 추가 (여러장 선택 가능)' : '사진 (여러장 선택 가능)'}
-
-                  multiple={true}
-                  files={albumPhotos}
-                  onFilesChange={(files) => {
-                    if (!editingAlbum) {
-                      // 파일 삭제 시 coverIndex 보정
-                      if (files.length <= albumCoverIndex) {
-                        setAlbumCoverIndex(Math.max(0, files.length - 1));
-                      }
-                    }
-                    setAlbumPhotos(files);
-                  }}
-                  {...(!editingAlbum ? { coverIndex: albumCoverIndex, onCoverSelect: setAlbumCoverIndex } : {})}
-                />
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    name="is_public"
-                    id="is_public"
-                    defaultChecked={editingAlbum ? editingAlbum.is_public : true}
-                    className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="is_public" className="text-sm text-gray-700">공개</label>
-                </div>
-                <div className="flex gap-2">
                   <button
                     type="submit"
-                    disabled={createAlbumMutation.isPending || updateAlbumMutation.isPending}
+                    disabled={createGalleryCategoryMutation.isPending || updateGalleryCategoryMutation.isPending}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
                   >
-                    {(createAlbumMutation.isPending || updateAlbumMutation.isPending) ? '저장 중...' : (editingAlbum ? '수정' : '저장')}
+                    {editingGalleryCategory ? '수정' : '추가'}
                   </button>
-                  {editingAlbum && (
+                  {editingGalleryCategory && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setEditingAlbum(null);
-                        setShowAlbumForm(false);
-                  
-                        setAlbumPhotos([]); setAlbumCoverIndex(0);
-                      }}
+                      onClick={() => setEditingGalleryCategory(null)}
                       className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-400"
                     >
                       취소
                     </button>
                   )}
                 </div>
-              </div>
-            </form>
-          )}
+              </form>
+            )}
 
-          <div className="divide-y divide-gray-200">
-            {albumsLoading ? (
-              <div className="p-8 text-center text-gray-500">로딩 중...</div>
-            ) : albumsError ? (
-              <div className="p-8 text-center text-red-500">갤러리를 불러오는 중 오류가 발생했습니다. 새로고침해 주세요.</div>
-            ) : albums && albums.length > 0 ? (
-              albums.map((album) => (
-                <div key={album.id} className={`p-4 flex justify-between items-center ${album.is_hidden ? 'bg-gray-100' : ''}`}>
-                  <div className="flex items-center gap-4">
-                    {album.cover_image && (
-                      <img src={album.cover_image} alt={album.title} className="w-16 h-16 object-cover rounded" />
-                    )}
+            <div className="divide-y divide-gray-200">
+              {galleryCategoriesLoading ? (
+                <div className="p-8 text-center text-gray-500">로딩 중...</div>
+              ) : galleryCategories && galleryCategories.length > 0 ? (
+                galleryCategories.map((cat) => (
+                  <div key={cat.id} className="p-4 flex justify-between items-center">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded ${
-                          album.album_type === 'public' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                        }`}>
-                          {album.album_type === 'public' ? '공용' : '회원전용'}
-                        </span>
-                        {album.is_hidden && (
-                          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-gray-200 text-gray-600">숨김</span>
-                        )}
-                        <span className="font-medium">{album.title}</span>
-                      </div>
-                      <div className="text-sm text-gray-500 mt-1">
-                        {album.author?.username} | {new Date(album.created_at).toLocaleDateString()} | 사진 {album.photo_count || 0}장
+                      <span className="font-medium">{cat.name}</span>
+                      <span className="text-sm text-gray-500 ml-2">({cat.album_count}개 앨범)</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingGalleryCategory(cat);
+                          setShowGalleryCategoryForm(true);
+                        }}
+                        className="px-3 py-1 text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (cat.album_count > 0) {
+                            alert('앨범이 포함된 카테고리는 삭제할 수 없습니다. 앨범의 카테고리를 먼저 변경해주세요.');
+                            return;
+                          }
+                          if (confirm(`"${cat.name}" 카테고리를 삭제하시겠습니까?`)) {
+                            deleteGalleryCategoryMutation.mutate(cat.id);
+                          }
+                        }}
+                        className="px-3 py-1 text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-gray-500">등록된 카테고리가 없습니다.</div>
+              )}
+            </div>
+          </div>
+
+          {/* 앨범 관리 */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">갤러리 앨범 목록</h2>
+              <button
+                onClick={() => {
+                  if (showAlbumForm && !editingAlbum) {
+                    setAlbumPhotos([]); setAlbumCoverIndex(0);
+                  }
+                  setEditingAlbum(null);
+                  setAlbumPhotos([]); setAlbumCoverIndex(0);
+                  setShowAlbumForm(!showAlbumForm);
+                }}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
+              >
+                {showAlbumForm && !editingAlbum ? '취소' : '새 앨범'}
+              </button>
+            </div>
+
+            {(showAlbumForm || editingAlbum) && (
+              <form ref={albumFormRef} key={editingAlbum?.id || 'new'} onSubmit={handleAlbumSubmit} className="p-4 border-b border-gray-200 bg-gray-50">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
+                      <input
+                        type="text"
+                        name="title"
+                        required
+                        defaultValue={editingAlbum?.title || ''}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
+                      <select
+                        name="category"
+                        defaultValue={editingAlbum?.category || ''}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                      >
+                        <option value="">선택 안함</option>
+                        {galleryCategories?.map((cat) => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">설명</label>
+                    <textarea
+                      name="description"
+                      rows={2}
+                      defaultValue={editingAlbum?.description || ''}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">앨범 유형</label>
+                    <select
+                      name="album_type"
+                      defaultValue={editingAlbum?.album_type || 'public'}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    >
+                      <option value="public">공용 갤러리</option>
+                      <option value="member">회원 전용 갤러리</option>
+                    </select>
+                  </div>
+                  {editingAlbum?.photos && editingAlbum.photos.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">기존 사진 (클릭하여 대표 지정)</label>
+                      <div className="flex flex-wrap gap-2">
+                        {editingAlbum.photos.map((photo) => {
+                          const isCover = editingAlbum.cover_photo_id === photo.id;
+                          return (
+                            <div key={photo.id} className="relative group">
+                              <img
+                                src={photo.image}
+                                alt=""
+                                className={`w-20 h-20 object-cover rounded cursor-pointer ${isCover ? 'ring-3 ring-green-500 border-2 border-green-500' : 'border border-gray-300 hover:ring-2 hover:ring-blue-300'}`}
+                                onClick={() => {
+                                  if (!isCover) {
+                                    setCoverMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
+                                  }
+                                }}
+                              />
+                              {isCover && (
+                                <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                                  대표
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm('이 사진을 삭제하시겠습니까?')) {
+                                    deletePhotoMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
+                                  }
+                                }}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                X
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
+                  )}
+                  <FileDropZone
+                    label={editingAlbum ? '새 사진 추가 (여러장 선택 가능)' : '사진 (여러장 선택 가능)'}
+                    multiple={true}
+                    files={albumPhotos}
+                    onFilesChange={(files) => {
+                      if (!editingAlbum) {
+                        if (files.length <= albumCoverIndex) {
+                          setAlbumCoverIndex(Math.max(0, files.length - 1));
+                        }
+                      }
+                      setAlbumPhotos(files);
+                    }}
+                    {...(!editingAlbum ? { coverIndex: albumCoverIndex, onCoverSelect: setAlbumCoverIndex } : {})}
+                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="is_public"
+                      id="is_public"
+                      defaultChecked={editingAlbum ? editingAlbum.is_public : true}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="is_public" className="text-sm text-gray-700">공개</label>
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => {
-                        setEditingAlbum(album);
-                        setAlbumPhotos([]); setAlbumCoverIndex(0);
-                        setShowAlbumForm(false);
-                        setTimeout(() => albumFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
-                      }}
-                      className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700 hover:bg-blue-200"
+                      type="submit"
+                      disabled={createAlbumMutation.isPending || updateAlbumMutation.isPending}
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
                     >
-                      수정
+                      {(createAlbumMutation.isPending || updateAlbumMutation.isPending) ? '저장 중...' : (editingAlbum ? '수정' : '저장')}
                     </button>
-                    <button
-                      onClick={() => toggleAlbumHiddenMutation.mutate(album.id)}
-                      className={`px-3 py-1 rounded text-sm ${
-                        album.is_hidden ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {album.is_hidden ? '표시' : '숨김'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (window.confirm('정말 삭제하시겠습니까? 앨범 내 모든 사진도 함께 삭제됩니다.')) {
-                          deleteAlbumMutation.mutate(album.id);
-                        }
-                      }}
-                      className="px-3 py-1 rounded text-sm bg-red-100 text-red-700 hover:bg-red-200"
-                    >
-                      삭제
-                    </button>
+                    {editingAlbum && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingAlbum(null);
+                          setShowAlbumForm(false);
+                          setAlbumPhotos([]); setAlbumCoverIndex(0);
+                        }}
+                        className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-400"
+                      >
+                        취소
+                      </button>
+                    )}
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="p-8 text-center text-gray-500">앨범이 없습니다.</div>
+              </form>
             )}
+
+            <div className="divide-y divide-gray-200">
+              {albumsLoading ? (
+                <div className="p-8 text-center text-gray-500">로딩 중...</div>
+              ) : albumsError ? (
+                <div className="p-8 text-center text-red-500">갤러리를 불러오는 중 오류가 발생했습니다. 새로고침해 주세요.</div>
+              ) : albums && albums.length > 0 ? (
+                albums.map((album) => (
+                  <div key={album.id} className={`p-4 flex justify-between items-center ${album.is_hidden ? 'bg-gray-100' : ''}`}>
+                    <div className="flex items-center gap-4">
+                      {album.cover_image && (
+                        <img src={album.cover_image} alt={album.title} className="w-16 h-16 object-cover rounded" />
+                      )}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded ${
+                            album.album_type === 'public' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                          }`}>
+                            {album.album_type === 'public' ? '공용' : '회원전용'}
+                          </span>
+                          {album.category_name && (
+                            <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-700">
+                              {album.category_name}
+                            </span>
+                          )}
+                          {album.is_hidden && (
+                            <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-gray-200 text-gray-600">숨김</span>
+                          )}
+                          <span className="font-medium">{album.title}</span>
+                        </div>
+                        <div className="text-sm text-gray-500 mt-1">
+                          {album.author?.username} | {new Date(album.created_at).toLocaleDateString()} | 사진 {album.photo_count || 0}장
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingAlbum(album);
+                          setAlbumPhotos([]); setAlbumCoverIndex(0);
+                          setShowAlbumForm(false);
+                          setTimeout(() => albumFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+                        }}
+                        className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700 hover:bg-blue-200"
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => toggleAlbumHiddenMutation.mutate(album.id)}
+                        className={`px-3 py-1 rounded text-sm ${
+                          album.is_hidden ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {album.is_hidden ? '표시' : '숨김'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm('정말 삭제하시겠습니까? 앨범 내 모든 사진도 함께 삭제됩니다.')) {
+                            deleteAlbumMutation.mutate(album.id);
+                          }
+                        }}
+                        className="px-3 py-1 rounded text-sm bg-red-100 text-red-700 hover:bg-red-200"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-gray-500">앨범이 없습니다.</div>
+              )}
+            </div>
           </div>
         </div>
       )}

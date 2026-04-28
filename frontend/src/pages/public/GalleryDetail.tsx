@@ -134,7 +134,7 @@ export default function GalleryDetail() {
         >
           {/* Close button */}
           <button
-            className="absolute top-4 right-4 text-white text-3xl hover:text-gray-300 z-10"
+            className="absolute top-4 right-4 text-white text-2xl sm:text-3xl hover:text-gray-300 z-10 w-11 h-11 flex items-center justify-center"
             onClick={closeLightbox}
           >
             &times;
@@ -143,7 +143,7 @@ export default function GalleryDetail() {
           {/* Previous button */}
           {allImages.length > 1 && (
             <button
-              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 text-white text-4xl sm:text-5xl hover:text-gray-300 z-10 p-2"
+              className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 text-white text-2xl sm:text-4xl hover:text-gray-300 z-10 w-11 h-11 flex items-center justify-center"
               onClick={(e) => { e.stopPropagation(); goPrev(); }}
             >
               &#8249;
@@ -161,7 +161,7 @@ export default function GalleryDetail() {
           {/* Next button */}
           {allImages.length > 1 && (
             <button
-              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 text-white text-4xl sm:text-5xl hover:text-gray-300 z-10 p-2"
+              className="absolute right-1 sm:right-4 top-1/2 -translate-y-1/2 text-white text-2xl sm:text-4xl hover:text-gray-300 z-10 w-11 h-11 flex items-center justify-center"
               onClick={(e) => { e.stopPropagation(); goNext(); }}
             >
               &#8250;

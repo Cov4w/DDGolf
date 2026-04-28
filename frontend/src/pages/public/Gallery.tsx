@@ -2,14 +2,21 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { galleryService } from '../../services/gallery';
+import type { GalleryCategory } from '../../types';
 import Loading from '../../components/common/Loading';
 
 export default function Gallery() {
   const [page, setPage] = useState(1);
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+
+  const { data: categories } = useQuery({
+    queryKey: ['galleryCategories'],
+    queryFn: () => galleryService.getCategories(),
+  });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['publicGallery', page],
-    queryFn: () => galleryService.getAlbums(page, true),
+    queryKey: ['publicGallery', page, selectedCategory],
+    queryFn: () => galleryService.getAlbums(page, true, selectedCategory || undefined),
   });
 
   if (isLoading) return <Loading />;
@@ -33,6 +40,35 @@ export default function Gallery() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Category Tabs */}
+        {categories && categories.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-8">
+            <button
+              onClick={() => { setSelectedCategory(null); setPage(1); }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                selectedCategory === null
+                  ? 'bg-green-700 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              전체
+            </button>
+            {categories.map((cat: GalleryCategory) => (
+              <button
+                key={cat.id}
+                onClick={() => { setSelectedCategory(cat.id); setPage(1); }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  selectedCategory === cat.id
+                    ? 'bg-green-700 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {cat.name} ({cat.album_count})
+              </button>
+            ))}
+          </div>
+        )}
+
         {data && data.results.length > 0 ? (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -57,6 +93,11 @@ export default function Gallery() {
                     <h2 className="font-bold text-gray-800 group-hover:text-green-700">
                       {album.title}
                     </h2>
+                    {album.category_name && (
+                      <span className="inline-block mt-1 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">
+                        {album.category_name}
+                      </span>
+                    )}
                     {album.description && (
                       <p className="text-sm text-gray-600 mt-1 line-clamp-2">
                         {album.description}

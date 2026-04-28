@@ -68,6 +68,14 @@ export interface Comment {
   updated_at: string;
 }
 
+// 갤러리 카테고리
+export interface GalleryCategory {
+  id: number;
+  name: string;
+  order: number;
+  album_count: number;
+}
+
 // 갤러리
 export interface Album {
   id: number;
@@ -81,6 +89,8 @@ export interface Album {
   is_hidden: boolean;
   photos: Photo[];
   photo_count?: number;
+  category?: number | null;
+  category_name?: string;
   created_at: string;
   updated_at: string;
 }

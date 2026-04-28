@@ -2,6 +2,20 @@ from django.db import models
 from django.conf import settings
 
 
+class GalleryCategory(models.Model):
+    """갤러리 카테고리"""
+    name = models.CharField('카테고리명', max_length=100)
+    order = models.PositiveIntegerField('정렬 순서', default=0)
+
+    class Meta:
+        verbose_name = '갤러리 카테고리'
+        verbose_name_plural = '갤러리 카테고리 목록'
+        ordering = ['order']
+
+    def __str__(self):
+        return self.name
+
+
 class Album(models.Model):
     """갤러리 앨범"""
 
@@ -9,6 +23,14 @@ class Album(models.Model):
         PUBLIC = 'public', '공용 갤러리'
         MEMBER = 'member', '회원 전용 갤러리'
 
+    category = models.ForeignKey(
+        GalleryCategory,
+        on_delete=models.SET_NULL,
+        related_name='albums',
+        verbose_name='카테고리',
+        blank=True,
+        null=True,
+    )
     title = models.CharField('제목', max_length=200)
     description = models.TextField('설명', blank=True)
     cover_image = models.ImageField('커버 이미지', upload_to='gallery/covers/', blank=True, null=True)

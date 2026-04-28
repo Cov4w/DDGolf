@@ -2,11 +2,30 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Album, Photo
+from .models import Album, Photo, GalleryCategory
 from .serializers import (
     AlbumListSerializer, AlbumDetailSerializer, AlbumCreateSerializer,
-    PhotoSerializer, AlbumAdminSerializer
+    PhotoSerializer, AlbumAdminSerializer, GalleryCategorySerializer
 )
+
+
+class IsAdminOrReadOnly(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return request.user and request.user.is_staff
+
+
+class GalleryCategoryViewSet(viewsets.ModelViewSet):
+    """갤러리 카테고리 ViewSet"""
+    queryset = GalleryCategory.objects.all()
+    serializer_class = GalleryCategorySerializer
+    permission_classes = [IsAdminOrReadOnly]
+    pagination_class = None
+
+    def perform_create(self, serializer):
+        max_order = GalleryCategory.objects.order_by('-order').values_list('order', flat=True).first() or 0
+        serializer.save(order=max_order + 1)
 
 
 class IsAuthorOrReadOnly(permissions.BasePermission):
@@ -40,6 +59,10 @@ class AlbumViewSet(viewsets.ModelViewSet):
 
         if album_type:
             queryset = queryset.filter(album_type=album_type)
+
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category_id=category)
 
         return queryset
 
@@ -163,5 +186,8 @@ class AlbumViewSet(viewsets.ModelViewSet):
         album_type = request.query_params.get('type')
         if album_type:
             queryset = queryset.filter(album_type=album_type)
+        category = request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category_id=category)
         serializer = AlbumAdminSerializer(queryset, many=True)
         return Response(serializer.data)

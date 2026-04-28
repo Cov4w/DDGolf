@@ -20,20 +20,20 @@ export default function PublicNotices() {
 
       {data && data.results && data.results.length > 0 ? (
         <>
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="bg-white rounded-lg shadow overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     제목
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
                     작성자
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
                     조회
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     작성일
                   </th>
                 </tr>
@@ -44,26 +44,26 @@ export default function PublicNotices() {
                     key={notice.id}
                     className={`hover:bg-gray-50 ${notice.is_important ? 'bg-yellow-50' : ''}`}
                   >
-                    <td className="px-6 py-4">
+                    <td className="px-3 sm:px-6 py-4">
                       <Link
                         to={`/public-notices/${notice.id}`}
                         className="text-gray-900 hover:text-green-600 flex items-center gap-2"
                       >
                         {notice.is_important && (
-                          <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded">
+                          <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded flex-shrink-0">
                             중요
                           </span>
                         )}
-                        {notice.title}
+                        <span className="line-clamp-1">{notice.title}</span>
                       </Link>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+                    <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
                       {notice.author?.username || '관리자'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+                    <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
                       {notice.views}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                       {new Date(notice.created_at).toLocaleDateString()}
                     </td>
                   </tr>

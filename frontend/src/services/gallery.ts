@@ -1,11 +1,35 @@
 import api from './api';
-import type { Album, Photo, PaginatedResponse } from '../types';
+import type { Album, Photo, GalleryCategory, PaginatedResponse } from '../types';
 
 export const galleryService = {
-  getAlbums: async (page = 1, publicOnly = false): Promise<PaginatedResponse<Album>> => {
+  // 카테고리 API
+  getCategories: async (): Promise<GalleryCategory[]> => {
+    const response = await api.get('/gallery/categories/');
+    return response.data;
+  },
+
+  createCategory: async (data: { name: string; order?: number }): Promise<GalleryCategory> => {
+    const response = await api.post('/gallery/categories/', data);
+    return response.data;
+  },
+
+  updateCategory: async (id: number, data: { name: string; order?: number }): Promise<GalleryCategory> => {
+    const response = await api.patch(`/gallery/categories/${id}/`, data);
+    return response.data;
+  },
+
+  deleteCategory: async (id: number): Promise<void> => {
+    await api.delete(`/gallery/categories/${id}/`);
+  },
+
+  // 앨범 API
+  getAlbums: async (page = 1, publicOnly = false, categoryId?: number): Promise<PaginatedResponse<Album>> => {
     const params = new URLSearchParams({ page: page.toString() });
     if (publicOnly) {
       params.append('public', 'true');
+    }
+    if (categoryId) {
+      params.append('category', categoryId.toString());
     }
     const response = await api.get(`/gallery/albums/?${params}`);
     return response.data;

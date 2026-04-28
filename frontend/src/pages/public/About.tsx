@@ -131,7 +131,7 @@ export default function About() {
                   <img
                     src={getImageUrl(aboutContent?.greeting_image) || '/images/chairman.jpg'}
                     alt="협회장"
-                    className="w-48 rounded-lg shadow-md object-cover"
+                    className="w-full sm:w-48 rounded-lg shadow-md object-cover"
                   />
                 </div>
               </div>

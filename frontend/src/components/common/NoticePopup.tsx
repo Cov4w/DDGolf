@@ -39,6 +39,16 @@ export default function NoticePopup({ popups, onClose, initialPosition }: Props)
     e.preventDefault();
   }, [position]);
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!popupRef.current) return;
+    const touch = e.touches[0];
+    setIsDragging(true);
+    dragOffset.current = {
+      x: touch.clientX - position.x,
+      y: touch.clientY - position.y,
+    };
+  }, [position]);
+
   useEffect(() => {
     if (!isDragging) return;
     const handleMouseMove = (e: MouseEvent) => {
@@ -47,12 +57,23 @@ export default function NoticePopup({ popups, onClose, initialPosition }: Props)
         y: e.clientY - dragOffset.current.y,
       });
     };
-    const handleMouseUp = () => setIsDragging(false);
+    const handleTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      setPosition({
+        x: touch.clientX - dragOffset.current.x,
+        y: touch.clientY - dragOffset.current.y,
+      });
+    };
+    const handleEnd = () => setIsDragging(false);
     window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleEnd);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleEnd);
     };
   }, [isDragging]);
 
@@ -86,7 +107,7 @@ export default function NoticePopup({ popups, onClose, initialPosition }: Props)
   return (
     <div
       ref={popupRef}
-      className="fixed z-50 bg-white rounded-lg shadow-2xl w-full max-w-sm overflow-hidden"
+      className="fixed z-50 bg-white rounded-lg shadow-2xl w-[calc(100vw-2rem)] sm:w-full max-w-sm max-h-[80vh] overflow-hidden flex flex-col"
       style={{
         left: position.x,
         top: position.y,
@@ -97,6 +118,7 @@ export default function NoticePopup({ popups, onClose, initialPosition }: Props)
       <div
         className="flex justify-between items-center px-4 py-3 border-b bg-green-700 text-white cursor-move"
         onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
       >
         <h3 className="font-semibold text-sm truncate flex-1">{current.title}</h3>
         <button
@@ -108,7 +130,7 @@ export default function NoticePopup({ popups, onClose, initialPosition }: Props)
       </div>
 
       {/* Content */}
-      <div className="p-4">
+      <div className="p-4 overflow-y-auto flex-1">
         {current.popup_image && (
           <img
             src={current.popup_image}

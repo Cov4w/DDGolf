@@ -61,7 +61,7 @@ export default function ClubImageModal({ images, clubName, onClose }: ClubImageM
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute -top-10 right-0 text-white hover:text-gray-300 text-2xl font-bold z-10"
+          className="absolute -top-12 right-0 text-white hover:text-gray-300 text-2xl font-bold z-10 w-11 h-11 flex items-center justify-center"
         >
           X
         </button>
@@ -75,7 +75,7 @@ export default function ClubImageModal({ images, clubName, onClose }: ClubImageM
           {images.length > 1 && (
             <button
               onClick={goPrev}
-              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-10 h-10 flex items-center justify-center z-10"
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-11 h-11 flex items-center justify-center z-10"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -93,7 +93,7 @@ export default function ClubImageModal({ images, clubName, onClose }: ClubImageM
           {images.length > 1 && (
             <button
               onClick={goNext}
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-10 h-10 flex items-center justify-center z-10"
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-11 h-11 flex items-center justify-center z-10"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

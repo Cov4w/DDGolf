@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -47,7 +47,32 @@ function FileDropZone({
   onCoverSelect?: (index: number) => void;
 }) {
   const [isDragging, setIsDragging] = useState(false);
+  const [sizeError, setSizeError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_TOTAL_SIZE = 1024 * 1024 * 1024; // 1GB
+  const MAX_SINGLE_FILE = 200 * 1024 * 1024; // 개별 파일 200MB
+
+  const validateAndAdd = useCallback((existingFiles: File[], newFiles: File[]) => {
+    // 개별 파일 크기 체크
+    const tooLarge = newFiles.filter(f => f.size > MAX_SINGLE_FILE);
+    if (tooLarge.length > 0) {
+      setSizeError(`파일 크기 초과 (최대 200MB): ${tooLarge.map(f => f.name).join(', ')}`);
+      newFiles = newFiles.filter(f => f.size <= MAX_SINGLE_FILE);
+    }
+
+    // 총 크기 체크
+    const currentTotal = existingFiles.reduce((sum, f) => sum + f.size, 0);
+    const newTotal = newFiles.reduce((sum, f) => sum + f.size, 0);
+    if (currentTotal + newTotal > MAX_TOTAL_SIZE) {
+      const remaining = Math.max(0, MAX_TOTAL_SIZE - currentTotal);
+      setSizeError(`총 업로드 용량 초과 (최대 1GB, 남은 용량: ${(remaining / 1024 / 1024).toFixed(0)}MB)`);
+      return existingFiles;
+    }
+
+    if (newFiles.length > 0) setSizeError('');
+    return [...existingFiles, ...newFiles];
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -73,33 +98,46 @@ function FileDropZone({
 
       if (droppedFiles.length > 0) {
         if (multiple) {
-          onFilesChange([...files, ...droppedFiles]);
+          onFilesChange(validateAndAdd(files, droppedFiles));
         } else {
           onFilesChange([droppedFiles[0]]);
         }
       }
     },
-    [files, multiple, onFilesChange, accept]
+    [files, multiple, onFilesChange, accept, validateAndAdd]
   );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     if (multiple) {
-      onFilesChange([...files, ...selectedFiles]);
+      onFilesChange(validateAndAdd(files, selectedFiles));
     } else {
       onFilesChange(selectedFiles);
     }
+    e.target.value = '';
   };
 
   const removeFile = (index: number) => {
     onFilesChange(files.filter((_, i) => i !== index));
   };
 
+  // blob URL을 안정적으로 관리 (매 렌더마다 재생성 방지)
+  const previewUrls = useMemo(() => {
+    return files.map((file) => file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
+  }, [files]);
+
+  // cleanup: files가 변경될 때 이전 blob URL 해제
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach((url) => { if (url) URL.revokeObjectURL(url); });
+    };
+  }, [previewUrls]);
+
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       <div
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); inputRef.current?.click(); }}
+        onClick={() => { inputRef.current?.click(); }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -138,15 +176,28 @@ function FileDropZone({
             ? (multiple ? '여러 이미지 선택 가능 (PNG, JPG, GIF)' : '이미지 파일 (PNG, JPG, GIF)')
             : (multiple ? '여러 파일 선택 가능' : '파일 선택')}
         </p>
+        {multiple && <p className="mt-1 text-xs text-gray-400">개별 파일 최대 200MB / 총 1GB</p>}
       </div>
+
+      {/* 용량 초과 경고 */}
+      {sizeError && (
+        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
+          {sizeError}
+        </div>
+      )}
 
       {/* 선택된 파일 미리보기 */}
       {files.length > 0 && (
         <div className="mt-3">
-          <p className="text-sm text-gray-600 mb-2">
-            선택된 파일 ({files.length}개)
-            {onCoverSelect && ' - 클릭하여 대표 지정'}
-          </p>
+          <div className="flex justify-between items-center mb-2">
+            <p className="text-sm text-gray-600">
+              선택된 파일 ({files.length}개)
+              {onCoverSelect && ' - 클릭하여 대표 지정'}
+            </p>
+            <p className="text-xs text-gray-400">
+              {(files.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(1)}MB / 1024MB
+            </p>
+          </div>
           <div className="flex flex-wrap gap-2">
             {files.map((file, index) => {
               const isCover = onCoverSelect && coverIndex === index;
@@ -154,9 +205,9 @@ function FileDropZone({
               const canSelectCover = onCoverSelect && isImage;
               return (
                 <div key={index} className="relative group">
-                  {isImage ? (
+                  {isImage && previewUrls[index] ? (
                     <img
-                      src={URL.createObjectURL(file)}
+                      src={previewUrls[index]}
                       alt={file.name}
                       className={`w-20 h-20 object-contain rounded-lg bg-gray-50 ${
                         isCover
@@ -186,7 +237,7 @@ function FileDropZone({
                       e.stopPropagation();
                       removeFile(index);
                     }}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
                   >
                     X
                   </button>
@@ -345,7 +396,7 @@ function ClubAssignSelect({
   );
 }
 
-const APP_VERSION = 'v1.12.20260428';
+const APP_VERSION = 'v2.0.20260430';
 
 export default function AdminDashboard() {
   const [searchParams] = useSearchParams();
@@ -371,6 +422,7 @@ export default function AdminDashboard() {
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   const [albumPhotos, setAlbumPhotos] = useState<File[]>([]);
   const [albumCoverIndex, setAlbumCoverIndex] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [showGalleryCategoryForm, setShowGalleryCategoryForm] = useState(false);
   const [editingGalleryCategory, setEditingGalleryCategory] = useState<{ id: number; name: string; order: number } | null>(null);
   const [showBannerForm, setShowBannerForm] = useState(false);
@@ -949,13 +1001,21 @@ export default function AdminDashboard() {
     mutationFn: (data: FormData) =>
       api.post('/gallery/albums/', data, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        },
       }),
     onSuccess: () => {
+      setUploadProgress(0);
       queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
       queryClient.invalidateQueries({ queryKey: ['adminGalleryCategories'] });
       setAlbumPhotos([]); setAlbumCoverIndex(0);
       setShowAlbumForm(false);
       alert('앨범이 등록되었습니다.');
+    },
+    onError: (error: any) => {
+      setUploadProgress(0);
+      alert('앨범 등록 실패: ' + (error?.response?.data?.detail || error?.message || '서버 오류'));
     },
   });
 
@@ -963,14 +1023,22 @@ export default function AdminDashboard() {
     mutationFn: ({ id, data }: { id: number; data: FormData }) =>
       api.patch(`/gallery/albums/${id}/`, data, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        },
       }),
     onSuccess: () => {
+      setUploadProgress(0);
       queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
       queryClient.invalidateQueries({ queryKey: ['adminGalleryCategories'] });
       setEditingAlbum(null);
       setAlbumPhotos([]); setAlbumCoverIndex(0);
       setShowAlbumForm(false);
       alert('앨범이 수정되었습니다.');
+    },
+    onError: (error: any) => {
+      setUploadProgress(0);
+      alert('앨범 수정 실패: ' + (error?.response?.data?.detail || error?.message || '서버 오류'));
     },
   });
 
@@ -3068,6 +3136,21 @@ export default function AdminDashboard() {
                     />
                     <label htmlFor="is_public" className="text-sm text-gray-700">공개</label>
                   </div>
+                  {/* 업로드 프로그래스바 */}
+                  {(createAlbumMutation.isPending || updateAlbumMutation.isPending) && (
+                    <div className="w-full">
+                      <div className="flex justify-between text-sm text-gray-600 mb-1">
+                        <span>업로드 중...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="bg-green-600 h-3 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <button
                       type="submit"
@@ -4150,7 +4233,7 @@ export default function AdminDashboard() {
                                   deleteDocFileMutation.mutate({ docId: editingDoc.id, fileId: ef.id });
                                 }
                               }}
-                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
                             >
                               X
                             </button>

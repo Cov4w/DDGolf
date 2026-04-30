@@ -8,6 +8,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        navigateFallbackDenylist: [/^\/api/, /^\/media/, /^\/ws/],
+      },
       manifest: {
         name: '대덕구골프협회',
         short_name: '대덕구골프',

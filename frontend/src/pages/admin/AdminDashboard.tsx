@@ -121,17 +121,18 @@ function FileDropZone({
     onFilesChange(files.filter((_, i) => i !== index));
   };
 
-  // blob URL을 안정적으로 관리 (매 렌더마다 재생성 방지)
   const previewUrls = useMemo(() => {
     return files.map((file) => file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
-  }, [files]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files.length, ...files.map(f => f.name + f.size)]);
 
-  // cleanup: files가 변경될 때 이전 blob URL 해제
+  // 컴포넌트 언마운트 시 blob URL 정리
   useEffect(() => {
     return () => {
-      previewUrls.forEach((url) => { if (url) URL.revokeObjectURL(url); });
+      previewUrls.forEach(url => { if (url) URL.revokeObjectURL(url); });
     };
-  }, [previewUrls]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div>

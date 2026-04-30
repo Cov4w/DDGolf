@@ -79,12 +79,13 @@ class Photo(models.Model):
     image = models.ImageField('이미지', upload_to='gallery/photos/')
     caption = models.CharField('설명', max_length=200, blank=True)
     is_hidden = models.BooleanField('숨김', default=False)
+    order = models.PositiveIntegerField('정렬 순서', default=0)
     created_at = models.DateTimeField('업로드일', auto_now_add=True)
 
     class Meta:
         verbose_name = '사진'
         verbose_name_plural = '사진 목록'
-        ordering = ['-created_at']
+        ordering = ['order', 'created_at']
 
     def __str__(self):
         return f'{self.album.title} - {self.caption or self.id}'

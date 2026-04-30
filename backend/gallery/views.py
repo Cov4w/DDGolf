@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db.models import Max
 
 from .models import Album, Photo, GalleryCategory
 from .serializers import (
@@ -76,9 +77,11 @@ class AlbumViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         album = serializer.save(author=self.request.user)
         photos = self.request.FILES.getlist('photos')
+        max_order = 0
         first_photo = None
         for photo_file in photos:
-            p = Photo.objects.create(album=album, image=photo_file)
+            p = Photo.objects.create(album=album, image=photo_file, order=max_order)
+            max_order += 1
             if first_photo is None:
                 first_photo = p
         if first_photo and not album.cover_photo:
@@ -89,9 +92,14 @@ class AlbumViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         album = serializer.save()
         photos = self.request.FILES.getlist('photos')
+        max_order = album.photos.aggregate(max_order=Max('order'))['max_order']
+        if max_order is None:
+            max_order = -1
+        next_order = max_order + 1
         first_photo = None
         for photo_file in photos:
-            p = Photo.objects.create(album=album, image=photo_file)
+            p = Photo.objects.create(album=album, image=photo_file, order=next_order)
+            next_order += 1
             if first_photo is None:
                 first_photo = p
         if first_photo and not album.cover_photo:
@@ -191,3 +199,64 @@ class AlbumViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(category_id=category)
         serializer = AlbumAdminSerializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='photos/(?P<photo_pk>[^/.]+)/move_up',
+            permission_classes=[permissions.IsAdminUser])
+    def move_photo_up(self, request, pk=None, photo_pk=None):
+        """사진 순서를 앞으로 (order 감소)"""
+        album = self.get_object()
+        try:
+            photo = album.photos.get(pk=photo_pk)
+            prev_photo = album.photos.filter(order__lt=photo.order).order_by('-order').first()
+            if prev_photo:
+                photo.order, prev_photo.order = prev_photo.order, photo.order
+                photo.save(update_fields=['order'])
+                prev_photo.save(update_fields=['order'])
+            return Response({'message': '순서가 변경되었습니다.'})
+        except Photo.DoesNotExist:
+            return Response({'error': '사진을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['post'], url_path='photos/(?P<photo_pk>[^/.]+)/move_down',
+            permission_classes=[permissions.IsAdminUser])
+    def move_photo_down(self, request, pk=None, photo_pk=None):
+        """사진 순서를 뒤로 (order 증가)"""
+        album = self.get_object()
+        try:
+            photo = album.photos.get(pk=photo_pk)
+            next_photo = album.photos.filter(order__gt=photo.order).order_by('order').first()
+            if next_photo:
+                photo.order, next_photo.order = next_photo.order, photo.order
+                photo.save(update_fields=['order'])
+                next_photo.save(update_fields=['order'])
+            return Response({'message': '순서가 변경되었습니다.'})
+        except Photo.DoesNotExist:
+            return Response({'error': '사진을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['post'], url_path='reorder_photos',
+            permission_classes=[permissions.IsAdminUser])
+    def reorder_photos(self, request, pk=None):
+        """사진 순서 일괄 변경 (드래그앤드롭용)"""
+        album = self.get_object()
+        photo_ids = request.data.get('photo_ids', [])
+        if not photo_ids:
+            return Response({'error': 'photo_ids가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        for order, photo_id in enumerate(photo_ids):
+            album.photos.filter(pk=photo_id).update(order=order)
+        return Response({'message': '순서가 변경되었습니다.'})
+
+    @action(detail=True, methods=['patch'], url_path='update_date',
+            permission_classes=[permissions.IsAdminUser])
+    def update_date(self, request, pk=None):
+        """앨범 등록일 변경"""
+        created_at = request.data.get('created_at')
+        if not created_at:
+            return Response({'error': 'created_at이 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        from django.utils.dateparse import parse_date
+        parsed = parse_date(created_at)
+        if not parsed:
+            return Response({'error': '날짜 형식이 올바르지 않습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        from django.utils import timezone
+        import datetime
+        dt = timezone.make_aware(datetime.datetime.combine(parsed, datetime.time.min))
+        Album.objects.filter(pk=pk).update(created_at=dt)
+        return Response({'message': '등록일이 변경되었습니다.'})

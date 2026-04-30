@@ -1,9 +1,9 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { User, Notice, Album, ChatRoom, Message, Banner, Organization, SmsLog, History } from '../../types';
+import type { User, Notice, Album, Photo, ChatRoom, Message, Banner, Organization, SmsLog, History } from '../../types';
 import Loading from '../../components/common/Loading';
 import { noticesService } from '../../services/notices';
 import { smsService } from '../../services/sms';
@@ -48,6 +48,7 @@ function FileDropZone({
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const [sizeError, setSizeError] = useState('');
+  const [dragReorderIdx, setDragReorderIdx] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const MAX_TOTAL_SIZE = 1024 * 1024 * 1024; // 1GB
@@ -121,18 +122,59 @@ function FileDropZone({
     onFilesChange(files.filter((_, i) => i !== index));
   };
 
-  const previewUrls = useMemo(() => {
-    return files.map((file) => file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [files.length, ...files.map(f => f.name + f.size)]);
+  const moveFileLeft = (index: number) => {
+    if (index <= 0) return;
+    const newFiles = [...files];
+    [newFiles[index - 1], newFiles[index]] = [newFiles[index], newFiles[index - 1]];
+    // coverIndex 보정
+    if (onCoverSelect && coverIndex !== undefined) {
+      if (coverIndex === index) onCoverSelect(index - 1);
+      else if (coverIndex === index - 1) onCoverSelect(index);
+    }
+    onFilesChange(newFiles);
+  };
 
-  // 컴포넌트 언마운트 시 blob URL 정리
+  const moveFileRight = (index: number) => {
+    if (index >= files.length - 1) return;
+    const newFiles = [...files];
+    [newFiles[index], newFiles[index + 1]] = [newFiles[index + 1], newFiles[index]];
+    // coverIndex 보정
+    if (onCoverSelect && coverIndex !== undefined) {
+      if (coverIndex === index) onCoverSelect(index + 1);
+      else if (coverIndex === index + 1) onCoverSelect(index);
+    }
+    onFilesChange(newFiles);
+  };
+
+  const [previewUrls, setPreviewUrls] = useState<(string | null)[]>([]);
+
+  // blob URL 대신 canvas 썸네일 data URL 생성 (ERR_FAILED 방지)
   useEffect(() => {
-    return () => {
-      previewUrls.forEach(url => { if (url) URL.revokeObjectURL(url); });
-    };
+    let cancelled = false;
+    if (files.length === 0) { setPreviewUrls([]); return; }
+
+    Promise.all(
+      files.map(async (file) => {
+        if (!file.type.startsWith('image/')) return null;
+        try {
+          const bitmap = await createImageBitmap(file);
+          const scale = Math.min(160 / bitmap.width, 160 / bitmap.height, 1);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(bitmap.width * scale);
+          canvas.height = Math.round(bitmap.height * scale);
+          const ctx = canvas.getContext('2d');
+          if (ctx) ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          bitmap.close();
+          return canvas.toDataURL('image/jpeg', 0.7);
+        } catch {
+          return null;
+        }
+      })
+    ).then(urls => { if (!cancelled) setPreviewUrls(urls); });
+
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [files.length, ...files.map(f => f.name + f.size + f.lastModified)]);
 
   return (
     <div>
@@ -205,7 +247,29 @@ function FileDropZone({
               const isImage = file.type.startsWith('image/');
               const canSelectCover = onCoverSelect && isImage;
               return (
-                <div key={index} className="relative group">
+                <div
+                  key={index}
+                  className={`relative group ${dragReorderIdx === index ? 'opacity-50' : ''}`}
+                  draggable={multiple && files.length > 1}
+                  onDragStart={(e) => { e.stopPropagation(); setDragReorderIdx(index); e.dataTransfer.effectAllowed = 'move'; }}
+                  onDragOver={(e) => { if (dragReorderIdx !== null && dragReorderIdx !== index) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; } }}
+                  onDrop={(e) => {
+                    if (dragReorderIdx !== null && dragReorderIdx !== index) {
+                      e.preventDefault(); e.stopPropagation();
+                      const newFiles = [...files];
+                      const [moved] = newFiles.splice(dragReorderIdx, 1);
+                      newFiles.splice(index, 0, moved);
+                      if (onCoverSelect && coverIndex !== undefined) {
+                        if (coverIndex === dragReorderIdx) onCoverSelect(index);
+                        else if (dragReorderIdx < coverIndex && index >= coverIndex) onCoverSelect(coverIndex - 1);
+                        else if (dragReorderIdx > coverIndex && index <= coverIndex) onCoverSelect(coverIndex + 1);
+                      }
+                      onFilesChange(newFiles);
+                      setDragReorderIdx(null);
+                    }
+                  }}
+                  onDragEnd={() => setDragReorderIdx(null)}
+                >
                   {isImage && previewUrls[index] ? (
                     <img
                       src={previewUrls[index]}
@@ -243,6 +307,26 @@ function FileDropZone({
                     X
                   </button>
                   <p className="text-xs text-gray-500 truncate w-20 mt-1">{file.name}</p>
+                  {multiple && files.length > 1 && (
+                    <div className="flex gap-1 mt-0.5 justify-center">
+                      <button
+                        type="button"
+                        disabled={index === 0}
+                        onClick={(e) => { e.stopPropagation(); moveFileLeft(index); }}
+                        className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-30"
+                      >
+                        &larr;
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === files.length - 1}
+                        onClick={(e) => { e.stopPropagation(); moveFileRight(index); }}
+                        className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-30"
+                      >
+                        &rarr;
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -397,7 +481,7 @@ function ClubAssignSelect({
   );
 }
 
-const APP_VERSION = 'v2.0.20260430';
+const APP_VERSION = 'v2.3.20260430';
 
 export default function AdminDashboard() {
   const [searchParams] = useSearchParams();
@@ -678,6 +762,15 @@ export default function AdminDashboard() {
           total_sms_sent: number;
           recent_users: { id: number; username: string; email: string; role: string; is_approved: boolean; created_at: string }[];
           recent_notices: { id: number; title: string; created_at: string }[];
+          system: {
+            cpu_percent: number;
+            memory_total: number;
+            memory_used: number;
+            memory_percent: number;
+            disk_total: number;
+            disk_used: number;
+            disk_percent: number;
+          };
         };
       } catch {
         return null;
@@ -1046,7 +1139,12 @@ export default function AdminDashboard() {
   const deletePhotoMutation = useMutation({
     mutationFn: ({ albumId, photoId }: { albumId: number; photoId: number }) =>
       api.delete(`/gallery/albums/${albumId}/photos/${photoId}/`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminAlbums'] }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['adminAlbums'] });
+      if (editingAlbum && editingAlbum.id === variables.albumId) {
+        setEditingAlbum({ ...editingAlbum, photos: editingAlbum.photos.filter(p => p.id !== variables.photoId) });
+      }
+    },
   });
 
   const setCoverMutation = useMutation({
@@ -1059,6 +1157,41 @@ export default function AdminDashboard() {
       }
     },
   });
+
+  const reorderPhotosMutation = useMutation({
+    mutationFn: ({ albumId, photoIds }: { albumId: number; photoIds: number[] }) =>
+      api.post(`/gallery/albums/${albumId}/reorder_photos/`, { photo_ids: photoIds }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminAlbums'] }),
+  });
+
+  const updateAlbumDateMutation = useMutation({
+    mutationFn: ({ albumId, date }: { albumId: number; date: string }) =>
+      api.patch(`/gallery/albums/${albumId}/update_date/`, { created_at: date }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminAlbums'] }),
+  });
+
+  // 사진 순서 즉시 반영 헬퍼
+  const applyPhotoReorder = (albumId: number, newPhotos: Photo[]) => {
+    const updated = newPhotos.map((p, i) => ({ ...p, order: i }));
+    if (editingAlbum && editingAlbum.id === albumId) {
+      setEditingAlbum({ ...editingAlbum, photos: updated });
+    }
+    reorderPhotosMutation.mutate({ albumId, photoIds: newPhotos.map(p => p.id) });
+  };
+
+  const movePhotoLocal = (albumId: number, photoId: number, direction: 'up' | 'down') => {
+    if (!editingAlbum || editingAlbum.id !== albumId) return;
+    const sorted = [...editingAlbum.photos].sort((a, b) => a.order - b.order);
+    const idx = sorted.findIndex(p => p.id === photoId);
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= sorted.length) return;
+    const reordered = [...sorted];
+    [reordered[idx], reordered[targetIdx]] = [reordered[targetIdx], reordered[idx]];
+    applyPhotoReorder(albumId, reordered);
+  };
+
+  const [photoDragIdx, setPhotoDragIdx] = useState<number | null>(null);
+  const [photoDragOverIdx, setPhotoDragOverIdx] = useState<number | null>(null);
 
   // Gallery Category Mutations
   const createGalleryCategoryMutation = useMutation({
@@ -1507,7 +1640,10 @@ export default function AdminDashboard() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">관리자 대시보드</h1>
+        <h1
+          className="text-3xl font-bold text-gray-900 cursor-pointer hover:text-green-700 transition-colors"
+          onClick={() => setActiveTab('dashboard')}
+        >관리자 대시보드</h1>
         <button
           onClick={async () => {
             setShowVersionModal(true);
@@ -1572,7 +1708,6 @@ export default function AdminDashboard() {
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex overflow-x-auto gap-x-4 scrollbar-hide">
           {[
-            { key: 'dashboard', label: '대시보드', badge: 0 },
             { key: 'members', label: '회원 관리', badge: adminNoti?.pending_users || 0 },
             { key: 'about', label: '협회소개 관리', badge: 0 },
             { key: 'notices', label: '공지사항 관리', badge: 0 },
@@ -1612,19 +1747,14 @@ export default function AdminDashboard() {
               대시보드 통계를 불러올 수 없습니다. 백엔드 서버를 업데이트해 주세요.
             </div>
           )}
-          {/* Stats Cards */}
+          {/* Stats Cards - 회원 현황 */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {[
               { label: '전체 회원', value: dashboardStats?.total_users ?? '-', color: 'bg-blue-500', icon: '👥' },
               { label: '승인 대기', value: dashboardStats?.pending_users ?? '-', color: 'bg-red-500', icon: '⏳' },
-              { label: '클럽 수', value: dashboardStats?.club_count ?? '-', color: 'bg-green-500', icon: '⛳' },
               { label: '클럽장', value: dashboardStats?.instructor_count ?? '-', color: 'bg-purple-500', icon: '🏅' },
               { label: '관리자', value: dashboardStats?.admin_count ?? '-', color: 'bg-yellow-500', icon: '🔑' },
               { label: '일반 회원', value: dashboardStats?.member_count ?? '-', color: 'bg-teal-500', icon: '👤' },
-              { label: '공지사항', value: dashboardStats?.total_notices ?? '-', color: 'bg-indigo-500', icon: '📋' },
-              { label: '다가오는 일정', value: dashboardStats?.upcoming_events_count ?? '-', color: 'bg-orange-500', icon: '📅' },
-              { label: 'SMS 발송', value: dashboardStats?.total_sms_sent ?? '-', color: 'bg-pink-500', icon: '💬' },
-              { label: '전체 일정', value: dashboardStats?.total_events ?? '-', color: 'bg-gray-500', icon: '🗓️' },
             ].map((stat) => (
               <div key={stat.label} className="bg-white rounded-lg shadow p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -1635,6 +1765,48 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
+
+          {/* System Resources */}
+          {dashboardStats?.system && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                {
+                  label: 'CPU 사용률',
+                  icon: '🖥️',
+                  percent: dashboardStats.system.cpu_percent,
+                  detail: `${dashboardStats.system.cpu_percent.toFixed(1)}%`,
+                },
+                {
+                  label: '메모리',
+                  icon: '🧠',
+                  percent: dashboardStats.system.memory_percent,
+                  detail: `${(dashboardStats.system.memory_used / 1073741824).toFixed(1)} / ${(dashboardStats.system.memory_total / 1073741824).toFixed(1)} GB`,
+                },
+                {
+                  label: '디스크',
+                  icon: '💾',
+                  percent: dashboardStats.system.disk_percent,
+                  detail: `${(dashboardStats.system.disk_used / 1073741824).toFixed(1)} / ${(dashboardStats.system.disk_total / 1073741824).toFixed(1)} GB`,
+                },
+              ].map((item) => {
+                const barColor = item.percent > 90 ? 'bg-red-500' : item.percent > 70 ? 'bg-yellow-500' : 'bg-green-500';
+                const textColor = item.percent > 90 ? 'text-red-600' : item.percent > 70 ? 'text-yellow-600' : 'text-green-600';
+                return (
+                  <div key={item.label} className="bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xl">{item.icon}</span>
+                      <span className="font-semibold text-gray-700">{item.label}</span>
+                      <span className={`ml-auto text-lg font-bold ${textColor}`}>{item.percent.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+                      <div className={`${barColor} h-3 rounded-full transition-all`} style={{ width: `${Math.max(item.percent, 1)}%` }} />
+                    </div>
+                    <div className="text-xs text-gray-500 text-right">{item.detail}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Charts */}
           {dashboardStats && (
@@ -1666,14 +1838,15 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Donut Chart */}
+              {/* 운영 현황 */}
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">운영 현황</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   {[
                     { label: '클럽', value: dashboardStats.club_count, color: 'text-green-600', bg: 'bg-green-100' },
                     { label: '공지사항', value: dashboardStats.total_notices, color: 'text-indigo-600', bg: 'bg-indigo-100' },
                     { label: '전체 일정', value: dashboardStats.total_events, color: 'text-orange-600', bg: 'bg-orange-100' },
+                    { label: '다가오는 일정', value: dashboardStats.upcoming_events_count, color: 'text-amber-600', bg: 'bg-amber-100' },
                     { label: 'SMS 발송', value: dashboardStats.total_sms_sent, color: 'text-pink-600', bg: 'bg-pink-100' },
                   ].map((item) => (
                     <div key={item.label} className={`${item.bg} rounded-lg p-4 text-center`}>
@@ -3062,57 +3235,136 @@ export default function AdminDashboard() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">앨범 유형</label>
-                    <select
-                      name="album_type"
-                      defaultValue={editingAlbum?.album_type || 'public'}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                    >
-                      <option value="public">공용 갤러리</option>
-                      <option value="member">회원 전용 갤러리</option>
-                    </select>
-                  </div>
-                  {editingAlbum?.photos && editingAlbum.photos.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">기존 사진 (클릭하여 대표 지정)</label>
-                      <div className="flex flex-wrap gap-2">
-                        {editingAlbum.photos.map((photo) => {
+                      <label className="block text-sm font-medium text-gray-700 mb-1">앨범 유형</label>
+                      <select
+                        name="album_type"
+                        defaultValue={editingAlbum?.album_type || 'public'}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                      >
+                        <option value="public">공용 갤러리</option>
+                        <option value="member">회원 전용 갤러리</option>
+                      </select>
+                    </div>
+                    {editingAlbum && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">등록일</label>
+                        <input
+                          type="date"
+                          name="created_at"
+                          defaultValue={editingAlbum.created_at?.slice(0, 10)}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              updateAlbumDateMutation.mutate({ albumId: editingAlbum.id, date: e.target.value });
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {editingAlbum?.photos && editingAlbum.photos.length > 0 && (() => {
+                    const sortedPhotos = [...editingAlbum.photos].sort((a, b) => a.order - b.order);
+                    return (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">기존 사진 (클릭: 대표 지정 / 드래그: 순서 변경)</label>
+                      <div
+                        className="flex flex-wrap"
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                        onDragEnd={() => { setPhotoDragIdx(null); setPhotoDragOverIdx(null); }}
+                      >
+                        {sortedPhotos.map((photo, idx) => {
                           const isCover = editingAlbum.cover_photo_id === photo.id;
+                          const isDragging = photoDragIdx !== null;
+                          const isDraggedItem = photoDragIdx === idx;
+                          const isDropTarget = isDragging && photoDragOverIdx === idx && !isDraggedItem;
                           return (
-                            <div key={photo.id} className="relative group">
-                              <img
-                                src={photo.image}
-                                alt=""
-                                className={`w-20 h-20 object-cover rounded cursor-pointer ${isCover ? 'ring-3 ring-green-500 border-2 border-green-500' : 'border border-gray-300 hover:ring-2 hover:ring-blue-300'}`}
-                                onClick={() => {
-                                  if (!isCover) {
-                                    setCoverMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
-                                  }
-                                }}
-                              />
-                              {isCover && (
-                                <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                                  대표
-                                </span>
+                            <div
+                              key={photo.id}
+                              className="flex items-start"
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                if (photoDragIdx !== null && photoDragIdx !== idx) {
+                                  setPhotoDragOverIdx(idx);
+                                }
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                if (photoDragIdx !== null && photoDragIdx !== idx) {
+                                  const reordered = [...sortedPhotos];
+                                  const [moved] = reordered.splice(photoDragIdx, 1);
+                                  reordered.splice(idx, 0, moved);
+                                  applyPhotoReorder(editingAlbum.id, reordered);
+                                }
+                                setPhotoDragIdx(null);
+                                setPhotoDragOverIdx(null);
+                              }}
+                            >
+                              {isDropTarget && (
+                                <div className="w-1.5 bg-blue-500 rounded-full self-stretch min-h-[5.5rem] flex-shrink-0" />
                               )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (window.confirm('이 사진을 삭제하시겠습니까?')) {
-                                    deletePhotoMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
-                                  }
+                              <div
+                                className={`relative group flex flex-col items-center mx-1 mb-2 ${isDraggedItem ? 'opacity-30 scale-90' : ''} transition-all duration-150`}
+                                draggable
+                                onDragStart={(e) => {
+                                  setPhotoDragIdx(idx);
+                                  setPhotoDragOverIdx(null);
+                                  e.dataTransfer.effectAllowed = 'move';
                                 }}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                               >
-                                X
-                              </button>
+                                <img
+                                  src={photo.image}
+                                  alt=""
+                                  className={`w-20 h-20 object-cover rounded cursor-grab active:cursor-grabbing ${isCover ? 'ring-3 ring-green-500 border-2 border-green-500' : 'border border-gray-300 hover:ring-2 hover:ring-blue-300'}`}
+                                  onClick={() => {
+                                    if (!isCover && !isDragging) {
+                                      setCoverMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
+                                    }
+                                  }}
+                                />
+                                {isCover && (
+                                  <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                                    대표
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm('이 사진을 삭제하시겠습니까?')) {
+                                      deletePhotoMutation.mutate({ albumId: editingAlbum.id, photoId: photo.id });
+                                    }
+                                  }}
+                                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
+                                >
+                                  X
+                                </button>
+                                <div className="flex gap-1 mt-1">
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => movePhotoLocal(editingAlbum.id, photo.id, 'up')}
+                                    className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-30"
+                                  >
+                                    &larr;
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === sortedPhotos.length - 1}
+                                    onClick={() => movePhotoLocal(editingAlbum.id, photo.id, 'down')}
+                                    className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-30"
+                                  >
+                                    &rarr;
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           );
                         })}
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
                   <FileDropZone
                     label={editingAlbum ? '새 사진 추가 (여러장 선택 가능)' : '사진 (여러장 선택 가능)'}
                     multiple={true}

@@ -100,6 +100,7 @@ export interface Photo {
   image: string;
   caption: string;
   is_hidden: boolean;
+  order: number;
   created_at: string;
 }
 

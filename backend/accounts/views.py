@@ -507,6 +507,12 @@ class DashboardStatsView(APIView):
             )
         )
 
+        # System resource info
+        import psutil
+        cpu_percent = psutil.cpu_percent(interval=0.5)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+
         return Response({
             'total_users': total_users,
             'pending_users': pending_users,
@@ -520,6 +526,15 @@ class DashboardStatsView(APIView):
             'total_sms_sent': total_sms_sent,
             'recent_users': recent_users,
             'recent_notices': recent_notices,
+            'system': {
+                'cpu_percent': cpu_percent,
+                'memory_total': mem.total,
+                'memory_used': mem.used,
+                'memory_percent': mem.percent,
+                'disk_total': disk.total,
+                'disk_used': disk.used,
+                'disk_percent': disk.percent,
+            },
         })
 
 

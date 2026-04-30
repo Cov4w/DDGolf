@@ -72,4 +72,20 @@ export const galleryService = {
   setCover: async (albumId: number, photoId: number): Promise<void> => {
     await api.post(`/gallery/albums/${albumId}/set_cover/${photoId}/`);
   },
+
+  movePhotoUp: async (albumId: number, photoId: number): Promise<void> => {
+    await api.post(`/gallery/albums/${albumId}/photos/${photoId}/move_up/`);
+  },
+
+  movePhotoDown: async (albumId: number, photoId: number): Promise<void> => {
+    await api.post(`/gallery/albums/${albumId}/photos/${photoId}/move_down/`);
+  },
+
+  reorderPhotos: async (albumId: number, photoIds: number[]): Promise<void> => {
+    await api.post(`/gallery/albums/${albumId}/reorder_photos/`, { photo_ids: photoIds });
+  },
+
+  updateAlbumDate: async (albumId: number, date: string): Promise<void> => {
+    await api.patch(`/gallery/albums/${albumId}/update_date/`, { created_at: date });
+  },
 };

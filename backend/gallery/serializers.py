@@ -17,7 +17,7 @@ class GalleryCategorySerializer(serializers.ModelSerializer):
 class PhotoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Photo
-        fields = ['id', 'image', 'caption', 'is_hidden', 'created_at']
+        fields = ['id', 'image', 'caption', 'is_hidden', 'order', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 
